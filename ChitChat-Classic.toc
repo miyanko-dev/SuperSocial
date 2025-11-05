@@ -1,9 +1,13 @@
 ## Interface: 11504
 ## Title: ChitChat Classic
-## Notes: Enhanced chat functionality with LFG broadcasting and keyword scanning for World of Warcraft Classic
+## Notes: Enhanced chat functionality with LFG broadcasting, keyword scanning, whisper utilities, and port finding for World of Warcraft Classic
 ## Author: MIYANKO
 ## Version: 1.0.0
 ## SavedVariables: ChitChatClassicDB
 
+Intro.lua
 Broadcast.lua
 ChatScan.lua
+WhisperUtility.lua
+ReplyRecent.lua
+PortFinder.lua
