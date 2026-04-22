@@ -4,7 +4,10 @@ Enhanced chat tools for World of Warcraft Classic.
 
 ## Features
 
-- **LFG Broadcasting**: Easily broadcast your group requests.\n- **Keyword Scanning**: Monitor chat for specific keywords.\n- **Whisper Tools**: Enhanced whisper management.\n- **Port Finder**: Quickly find mages offering portals.
+- **LFG Broadcasting**: Easily broadcast your group requests.
+- **Keyword Scanning**: Monitor chat for specific keywords.
+- **Whisper Tools**: Enhanced whisper management.
+- **Port Finder**: Quickly find mages offering portals.
 
 ## Installation
 
