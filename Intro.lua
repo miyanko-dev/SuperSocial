@@ -41,7 +41,7 @@ local function showCommandListTooltip()
 	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/ww N MESSAGE" .. "|r" .. WHITE_LUA .. " Whisper first N players" .. "|r")
 	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/ww -CLASS MSG" .. "|r" .. WHITE_LUA .. " Exclude class from whispers" .. "|r")
 	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/ww+ MESSAGE" .. "|r" .. WHITE_LUA .. " Whisper with ignore list" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/ww reset" .. "|r" .. WHITE_LUA .. " Clear whisper ignore list" .. "|r")
+	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/ww reset" .. "|r" .. WHITE_LUA .. " Clear ignore list (also works with /ww+)" .. "|r")
 	tooltip:AddLine(" ")
 
 	tooltip:AddLine(YELLOW_LIGHT_LUA .. "Reply to Whispers" .. "|r")

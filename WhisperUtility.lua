@@ -12,6 +12,15 @@ local function initIgnoreList()
 	end
 end
 
+local function resetIgnoreList()
+	if ChitChatClassicDB and ChitChatClassicDB.MultiWhisperIgnore then
+		ChitChatClassicDB.MultiWhisperIgnore = {}
+		print(YELLOW_LIGHT_LUA .. "[ChitChat]: " .. WHITE_LUA .. "MultiWhisper ignore list cleared.")
+	else
+		print(YELLOW_LIGHT_LUA .. "[ChitChat]: " .. WHITE_LUA .. "MultiWhisper ignore list is already empty.")
+	end
+end
+
 local function sendTargetWhisper(messageText)
 	if not messageText or messageText == "" then
 		print(YELLOW_LIGHT_LUA .. "[ChitChat]: " .. WHITE_LUA .. "Usage: /wt MESSAGE")
@@ -66,6 +75,10 @@ local function getWhisperParams(commandString)
 end
 
 local function sendWhoWhisper(commandString)
+	if commandString:match("^%s*reset%s*$") then
+		resetIgnoreList()
+		return
+	end
 	local playerLimit, skipClass, messageText = getWhisperParams(commandString)
 	local whoCount = C_FriendList.GetNumWhoResults()
 	playerLimit = playerLimit and tonumber(playerLimit) or whoCount
@@ -86,6 +99,10 @@ local function sendWhoWhisper(commandString)
 end
 
 local function sendWhoWhisperSkip(commandString)
+	if commandString:match("^%s*reset%s*$") then
+		resetIgnoreList()
+		return
+	end
 	initIgnoreList()
 	local playerLimit, skipClass, messageText = getWhisperParams(commandString)
 	local whoCount = C_FriendList.GetNumWhoResults()
@@ -108,15 +125,6 @@ local function sendWhoWhisperSkip(commandString)
 	end
 end
 
-local function resetIgnoreList()
-	if ChitChatClassicDB and ChitChatClassicDB.MultiWhisperIgnore then
-		ChitChatClassicDB.MultiWhisperIgnore = {}
-		print(YELLOW_LIGHT_LUA .. "[ChitChat]: " .. WHITE_LUA .. "MultiWhisper ignore list cleared.")
-	else
-		print(YELLOW_LIGHT_LUA .. "[ChitChat]: " .. WHITE_LUA .. "MultiWhisper ignore list is already empty.")
-	end
-end
-
 SLASH_WHISPERTARGET1 = "/wt"
 SlashCmdList["WHISPERTARGET"] = sendTargetWhisper
 
@@ -128,6 +136,3 @@ SlashCmdList["WHISPERWHO"] = sendWhoWhisper
 
 SLASH_WHISPERWHO_SKIP1 = "/ww+"
 SlashCmdList["WHISPERWHO_SKIP"] = sendWhoWhisperSkip
-
-SLASH_WHISPER_RESET1 = "/ww reset"
-SlashCmdList["WHISPER_RESET"] = resetIgnoreList
