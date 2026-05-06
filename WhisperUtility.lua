@@ -136,3 +136,28 @@ SlashCmdList["WHISPERWHO"] = sendWhoWhisper
 
 SLASH_WHISPERWHO_SKIP1 = "/ww+"
 SlashCmdList["WHISPERWHO_SKIP"] = sendWhoWhisperSkip
+
+local colorFrame = CreateFrame("Frame")
+colorFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
+colorFrame:RegisterEvent("UPDATE_CHAT_COLOR")
+colorFrame:SetScript("OnEvent", function()
+	local base = ChatTypeInfo["WHISPER_INFORM"]
+	if not base then return end
+	local incoming = ChatTypeInfo["WHISPER"]
+	if not incoming then return end
+	incoming.r = base.r + (1 - base.r) * 0.5
+	incoming.g = base.g + (1 - base.g) * 0.5
+	incoming.b = base.b + (1 - base.b) * 0.5
+end)
+
+hooksecurefunc("ChatEdit_UpdateHeader", function(editBox)
+	local chatType = editBox:GetAttribute("chatType")
+	if chatType == "WHISPER" then
+		local info = ChatTypeInfo["WHISPER_INFORM"]
+		if not info then return end
+		editBox:SetTextColor(info.r, info.g, info.b)
+		if editBox.header then
+			editBox.header:SetTextColor(info.r, info.g, info.b)
+		end
+	end
+end)
