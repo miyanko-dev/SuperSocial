@@ -1,71 +1,33 @@
--- Display available commands on login and via slash command
+local YELLOW = "|cFFFDE89B"
+local RESET  = "|r"
 
-local YELLOW_LIGHT_LUA = "|cFFFDE89B"
-local WHITE_LUA = "|cFFFFFFFF"
-
-local function showCommandIntroMsg()
-	print(YELLOW_LIGHT_LUA .. "/chitchat" .. "|r" .. " for available commands.")
+local function printCommands()
+	print(YELLOW .. "[/cs KEYWORD]" .. RESET .. ": Monitor chat for a keyword")
+	print(YELLOW .. "[/cs WORD AND WORD]" .. RESET .. ": Match both words")
+	print(YELLOW .. "[/cs WORD OR WORD]" .. RESET .. ": Match either word")
+	print(YELLOW .. "[/cs WORD NOT WORD]" .. RESET .. ": Match first, exclude second")
+	print(YELLOW .. "[/cs]" .. RESET .. ": Stop scanning")
+	print(YELLOW .. "[/wt MESSAGE]" .. RESET .. ": Whisper your current target")
+	print(YELLOW .. "[/wt-once MESSAGE]" .. RESET .. ": Whisper target (one-time only)")
+	print(YELLOW .. "[/ww MESSAGE]" .. RESET .. ": Whisper everyone in /who results")
+	print(YELLOW .. "[/ww N MESSAGE]" .. RESET .. ": Whisper first N players in /who results")
+	print(YELLOW .. "[/ww -CLASS MESSAGE]" .. RESET .. ": Whisper /who results, excluding a class")
+	print(YELLOW .. "[/ww-once MESSAGE]" .. RESET .. ": Whisper /who results (one-time only)")
+	print(YELLOW .. "[/ww reset]" .. RESET .. ": Clear the persistent ignore list")
+	print(YELLOW .. "[/rr MESSAGE]" .. RESET .. ": Reply to all recent whisperers")
+	print(YELLOW .. "[/rr N MESSAGE]" .. RESET .. ": Reply to the last N whisperers")
+	print(YELLOW .. "[/rr reset]" .. RESET .. ": Clear the session reply list")
+	print(YELLOW .. "[/port]" .. RESET .. ": Find mages in your current zone")
+	print(YELLOW .. "[/port ZONE]" .. RESET .. ": Find warlocks in the specified zone")
 end
 
-local loginEventFrame = CreateFrame("Frame")
-loginEventFrame:RegisterEvent("PLAYER_LOGIN")
-loginEventFrame:SetScript("OnEvent", showCommandIntroMsg)
-
-local function showCommandListTooltip()
-	local tooltip = _G["ChitChatCommandTooltip"] or CreateFrame("GameTooltip", "ChitChatCommandTooltip", UIParent, "GameTooltipTemplate")
-	tooltip:ClearLines()
-	tooltip:SetOwner(UIParent, "ANCHOR_NONE")
-	tooltip:SetPoint("CENTER", UIParent, "CENTER")
-	tooltip:SetMovable(true)
-	tooltip:EnableMouse(true)
-	tooltip:RegisterForDrag("LeftButton")
-	tooltip:SetScript("OnDragStart", tooltip.StartMoving)
-	tooltip:SetScript("OnDragStop", tooltip.StopMovingOrSizing)
-
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "ChitChat Classic" .. "|r", 1, 1, 1, true)
-	tooltip:AddLine(" ")
-
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "Broadcasting & Scanning" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/lfg MESSAGE" .. "|r" .. WHITE_LUA .. " Broadcast to World/LFG" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/cs KEYWORD" .. "|r" .. WHITE_LUA .. " Monitor chat for keyword" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/cs WORD AND WORD" .. "|r" .. WHITE_LUA .. " Search with AND logic" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/cs WORD OR WORD" .. "|r" .. WHITE_LUA .. " Search with OR logic" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/cs WORD NOT WORD" .. "|r" .. WHITE_LUA .. " Search with NOT logic" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/cs" .. "|r" .. WHITE_LUA .. " Stop scanning" .. "|r")
-	tooltip:AddLine(" ")
-
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "Whisper Utilities" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/wt MESSAGE" .. "|r" .. WHITE_LUA .. " Whisper current target" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/wt+ MESSAGE" .. "|r" .. WHITE_LUA .. " Whisper target (no spam)" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/ww MESSAGE" .. "|r" .. WHITE_LUA .. " Whisper all in /who list" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/ww N MESSAGE" .. "|r" .. WHITE_LUA .. " Whisper first N players" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/ww -CLASS MSG" .. "|r" .. WHITE_LUA .. " Exclude class from whispers" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/ww+ MESSAGE" .. "|r" .. WHITE_LUA .. " Whisper with ignore list" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/ww reset" .. "|r" .. WHITE_LUA .. " Clear ignore list (also works with /ww+)" .. "|r")
-	tooltip:AddLine(" ")
-
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "Reply to Whispers" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/rr MESSAGE" .. "|r" .. WHITE_LUA .. " Reply to recent whispers" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/rr N MESSAGE" .. "|r" .. WHITE_LUA .. " Reply to last N senders" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/rr reset" .. "|r" .. WHITE_LUA .. " Reset reply tracking" .. "|r")
-	tooltip:AddLine(" ")
-
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "Port Finder" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/port" .. "|r" .. WHITE_LUA .. " Find mages in current zone" .. "|r")
-	tooltip:AddLine(YELLOW_LIGHT_LUA .. "/port ZONE" .. "|r" .. WHITE_LUA .. " Find warlocks in zone" .. "|r")
-
-	tooltip:Show()
-
-	local closeBtn = CreateFrame("Button", nil, tooltip, "UIPanelCloseButton")
-	closeBtn:SetPoint("TOPRIGHT", tooltip, "TOPRIGHT")
-	closeBtn:SetScript("OnClick", function()
-		tooltip:Hide()
-	end)
-end
+local loginFrame = CreateFrame("Frame")
+loginFrame:RegisterEvent("PLAYER_LOGIN")
+loginFrame:SetScript("OnEvent", function()
+	print(YELLOW .. "ChitChat Classic loaded." .. RESET .. " Type /chitchat for commands.")
+end)
 
 SLASH_CHITCHAT1 = "/chitchat"
 SlashCmdList["CHITCHAT"] = function(msg)
-	if msg == "" then
-		showCommandListTooltip()
-	end
+	printCommands()
 end

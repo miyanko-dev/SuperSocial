@@ -6,7 +6,6 @@
 ## SavedVariables: ChitChatClassicDB
 
 Intro.lua
-Broadcast.lua
 ChatScan.lua
 WhisperUtility.lua
 ReplyRecent.lua

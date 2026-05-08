@@ -36,7 +36,7 @@ end
 
 local function sendTargetWhisperProtected(messageText)
 	if not messageText or messageText == "" then
-		print(YELLOW_LIGHT_LUA .. "[ChitChat]: " .. WHITE_LUA .. "Usage: /wt+ MESSAGE")
+		print(YELLOW_LIGHT_LUA .. "[ChitChat]: " .. WHITE_LUA .. "Usage: /wt-once MESSAGE")
 		return
 	end
 	if UnitExists("target") and UnitIsPlayer("target") then
@@ -128,13 +128,13 @@ end
 SLASH_WHISPERTARGET1 = "/wt"
 SlashCmdList["WHISPERTARGET"] = sendTargetWhisper
 
-SLASH_WHISPERTARGET_SKIP1 = "/wt+"
+SLASH_WHISPERTARGET_SKIP1 = "/wt-once"
 SlashCmdList["WHISPERTARGET_SKIP"] = sendTargetWhisperProtected
 
 SLASH_WHISPERWHO1 = "/ww"
 SlashCmdList["WHISPERWHO"] = sendWhoWhisper
 
-SLASH_WHISPERWHO_SKIP1 = "/ww+"
+SLASH_WHISPERWHO_SKIP1 = "/ww-once"
 SlashCmdList["WHISPERWHO_SKIP"] = sendWhoWhisperSkip
 
 local colorFrame = CreateFrame("Frame")
