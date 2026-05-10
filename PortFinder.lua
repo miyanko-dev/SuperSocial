@@ -1,15 +1,12 @@
--- Find teleport providers in current or target zone
+local function findPort(zone)
+    local maxLevel = GetMaxPlayerLevel()
 
-local function handlePortCommand(targetZone)
-	local playerMaxLevel = GetMaxPlayerLevel()
-
-	if targetZone ~= "" then
-		C_FriendList.SendWho("z-" .. targetZone .. " c-warlock 20-" .. playerMaxLevel)
-	else
-		local currentZone = GetRealZoneText()
-		C_FriendList.SendWho("z-" .. currentZone .. " c-mage 40-" .. playerMaxLevel)
-	end
+    if zone ~= "" then
+        C_FriendList.SendWho("z-" .. zone .. " c-warlock 20-" .. maxLevel)
+    else
+        C_FriendList.SendWho("z-" .. GetRealZoneText() .. " c-mage 40-" .. maxLevel)
+    end
 end
 
 SLASH_PORT1 = "/port"
-SlashCmdList["PORT"] = handlePortCommand
+SlashCmdList["PORT"] = findPort

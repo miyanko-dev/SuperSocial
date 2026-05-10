@@ -1,71 +1,74 @@
--- Track recent whisper players and handle multi-reply functionality
+local YELLOW = "|cffffff00"
+local RESET = "|r"
 
-local YELLOW_LIGHT_LUA = "|cFFFDE89B"
-local WHITE_LUA = "|cFFFFFFFF"
+local MAX_RECENT = 80
 
-local recentWhisperList = {}
-local recentWhisperSet = {}
-local alreadyWhisperedSet = {}
-local maxRecentWhisper = 80
+local recentList = {}
+local recentSet = {}
+local repliedSet = {}
 
-local function sendToLastWhisperers(inputText)
-	local targetCount, messageText = inputText:match("^(%d+)%s+(.+)$")
-	if not messageText then
-		messageText = inputText
-		targetCount = #recentWhisperList
-	else
-		targetCount = tonumber(targetCount)
-	end
-	if #recentWhisperList == 0 then
-		print(YELLOW_LIGHT_LUA .. "[ChitChat]: " .. WHITE_LUA .. "No players have whispered you yet.")
-		return
-	end
-	if targetCount and messageText and messageText ~= "" then
-		local sessionSet = {}
-		local startIdx = math.max(#recentWhisperList - targetCount + 1, 1)
-		for i = startIdx, #recentWhisperList do
-			local playerName = recentWhisperList[i]
-			if playerName and not sessionSet[playerName] and not alreadyWhisperedSet[playerName] then
-				SendChatMessage(messageText, "WHISPER", nil, playerName)
-				sessionSet[playerName] = true
-				alreadyWhisperedSet[playerName] = true
-			end
-		end
-	else
-		print(YELLOW_LIGHT_LUA .. "[ChitChat]: " .. WHITE_LUA .. "Usage: /rr MESSAGE or /rr N MESSAGE")
-	end
+local function announce(msg)
+    print(YELLOW .. "[ChitChat]:" .. RESET .. " " .. msg)
 end
 
-local function addRecentWhisper(playerName)
-	if recentWhisperSet[playerName] then
-		for i = 1, #recentWhisperList do
-			if recentWhisperList[i] == playerName then
-				table.remove(recentWhisperList, i)
-				break
-			end
-		end
-	else
-		recentWhisperSet[playerName] = true
-	end
-	table.insert(recentWhisperList, playerName)
-	while #recentWhisperList > maxRecentWhisper do
-		local removedName = table.remove(recentWhisperList, 1)
-		recentWhisperSet[removedName] = nil
-	end
+local function replyRecent(input)
+    local count, text = input:match("^(%d+)%s+(.+)$")
+    if not text then
+        text = input
+        count = #recentList
+    else
+        count = tonumber(count)
+    end
+    if #recentList == 0 then
+        announce("no players have whispered you yet.")
+        return
+    end
+    if count and text and text ~= "" then
+        local session = {}
+        local start = math.max(#recentList - count + 1, 1)
+        for i = start, #recentList do
+            local name = recentList[i]
+            if name and not session[name] and not repliedSet[name] then
+                SendChatMessage(text, "WHISPER", nil, name)
+                session[name] = true
+                repliedSet[name] = true
+            end
+        end
+    else
+        announce("usage: /rr MESSAGE or /rr N MESSAGE")
+    end
 end
 
-local whisperFrame = CreateFrame("Frame")
-whisperFrame:RegisterEvent("CHAT_MSG_WHISPER")
-whisperFrame:SetScript("OnEvent", function(_, _, _, senderName)
-	addRecentWhisper(senderName)
+local function addRecent(name)
+    if recentSet[name] then
+        for i = 1, #recentList do
+            if recentList[i] == name then
+                table.remove(recentList, i)
+                break
+            end
+        end
+    else
+        recentSet[name] = true
+    end
+    table.insert(recentList, name)
+    while #recentList > MAX_RECENT do
+        local removed = table.remove(recentList, 1)
+        recentSet[removed] = nil
+    end
+end
+
+local frame = CreateFrame("Frame")
+frame:RegisterEvent("CHAT_MSG_WHISPER")
+frame:SetScript("OnEvent", function(_, _, _, sender)
+    addRecent(sender)
 end)
 
 SLASH_REPLYRECENT1 = "/rr"
-SlashCmdList["REPLYRECENT"] = function(inputText)
-	if inputText == "reset" then
-		alreadyWhisperedSet = {}
-		print(YELLOW_LIGHT_LUA .. "[ChitChat]: " .. WHITE_LUA .. "Reset whispered players list. You can now whisper all recent players again.")
-	else
-		sendToLastWhisperers(inputText)
-	end
+SlashCmdList["REPLYRECENT"] = function(input)
+    if input == "reset" then
+        repliedSet = {}
+        announce("reply list cleared.")
+    else
+        replyRecent(input)
+    end
 end

@@ -1,163 +1,154 @@
--- Whisper utility functions for target and who list messaging with spam protection
+local YELLOW = "|cffffff00"
+local RESET = "|r"
 
-local YELLOW_LIGHT_LUA = "|cFFFDE89B"
-local WHITE_LUA = "|cFFFFFFFF"
+local function announce(msg)
+    print(YELLOW .. "[ChitChat]:" .. RESET .. " " .. msg)
+end
 
 local function initIgnoreList()
-	if not ChitChatClassicDB then
-		ChitChatClassicDB = {}
-	end
-	if type(ChitChatClassicDB.MultiWhisperIgnore) ~= "table" then
-		ChitChatClassicDB.MultiWhisperIgnore = {}
-	end
+    if not ChitChatClassicDB then ChitChatClassicDB = {} end
+    if type(ChitChatClassicDB.MultiWhisperIgnore) ~= "table" then
+        ChitChatClassicDB.MultiWhisperIgnore = {}
+    end
 end
 
 local function resetIgnoreList()
-	if ChitChatClassicDB and ChitChatClassicDB.MultiWhisperIgnore then
-		ChitChatClassicDB.MultiWhisperIgnore = {}
-		print(YELLOW_LIGHT_LUA .. "[ChitChat]: " .. WHITE_LUA .. "MultiWhisper ignore list cleared.")
-	else
-		print(YELLOW_LIGHT_LUA .. "[ChitChat]: " .. WHITE_LUA .. "MultiWhisper ignore list is already empty.")
-	end
+    if ChitChatClassicDB and ChitChatClassicDB.MultiWhisperIgnore then
+        ChitChatClassicDB.MultiWhisperIgnore = {}
+        announce("ignore list cleared.")
+    else
+        announce("ignore list is already empty.")
+    end
 end
 
-local function sendTargetWhisper(messageText)
-	if not messageText or messageText == "" then
-		print(YELLOW_LIGHT_LUA .. "[ChitChat]: " .. WHITE_LUA .. "Usage: /wt MESSAGE")
-		return
-	end
-	if UnitExists("target") and UnitIsPlayer("target") then
-		local targetName = UnitName("target")
-		SendChatMessage(messageText, "WHISPER", nil, targetName)
-	else
-		print(YELLOW_LIGHT_LUA .. "[ChitChat]: " .. WHITE_LUA .. "No valid player target selected")
-	end
+local function whisperTarget(text)
+    if not text or text == "" then
+        announce("usage: /wt MESSAGE")
+        return
+    end
+    if UnitExists("target") and UnitIsPlayer("target") then
+        SendChatMessage(text, "WHISPER", nil, UnitName("target"))
+    else
+        announce("no valid player target.")
+    end
 end
 
-local function sendTargetWhisperProtected(messageText)
-	if not messageText or messageText == "" then
-		print(YELLOW_LIGHT_LUA .. "[ChitChat]: " .. WHITE_LUA .. "Usage: /wt-once MESSAGE")
-		return
-	end
-	if UnitExists("target") and UnitIsPlayer("target") then
-		local targetName = UnitName("target")
-		initIgnoreList()
-		if not ChitChatClassicDB.MultiWhisperIgnore[targetName] then
-			SendChatMessage(messageText, "WHISPER", nil, targetName)
-			ChitChatClassicDB.MultiWhisperIgnore[targetName] = true
-		else
-			print(YELLOW_LIGHT_LUA .. "[ChitChat]: " .. WHITE_LUA .. "Player " .. targetName .. " already contacted")
-		end
-	else
-		print(YELLOW_LIGHT_LUA .. "[ChitChat]: " .. WHITE_LUA .. "No valid player target selected")
-	end
+local function whisperTargetOnce(text)
+    if not text or text == "" then
+        announce("usage: /wt-once MESSAGE")
+        return
+    end
+    if UnitExists("target") and UnitIsPlayer("target") then
+        local name = UnitName("target")
+        initIgnoreList()
+        if not ChitChatClassicDB.MultiWhisperIgnore[name] then
+            SendChatMessage(text, "WHISPER", nil, name)
+            ChitChatClassicDB.MultiWhisperIgnore[name] = true
+        else
+            announce(name .. " already contacted.")
+        end
+    else
+        announce("no valid player target.")
+    end
 end
 
-local function getWhisperParams(commandString)
-	local playerLimit, skipClass, messageText
+local function parseWhoParams(input)
+    local limit, skip, text
 
-	playerLimit, skipClass, messageText = commandString:match("^(%d+)%s+%-(%w+)%s+(.+)$")
-	if playerLimit then
-		return playerLimit, skipClass, messageText
-	end
+    limit, skip, text = input:match("^(%d+)%s+%-(%w+)%s+(.+)$")
+    if limit then return limit, skip, text end
 
-	playerLimit, messageText = commandString:match("^(%d+)%s+(.+)$")
-	if playerLimit then
-		return playerLimit, nil, messageText
-	end
+    limit, text = input:match("^(%d+)%s+(.+)$")
+    if limit then return limit, nil, text end
 
-	skipClass, messageText = commandString:match("^%-(%w+)%s+(.+)$")
-	if skipClass then
-		return nil, skipClass, messageText
-	end
+    skip, text = input:match("^%-(%w+)%s+(.+)$")
+    if skip then return nil, skip, text end
 
-	return nil, nil, commandString
+    return nil, nil, input
 end
 
-local function sendWhoWhisper(commandString)
-	if commandString:match("^%s*reset%s*$") then
-		resetIgnoreList()
-		return
-	end
-	local playerLimit, skipClass, messageText = getWhisperParams(commandString)
-	local whoCount = C_FriendList.GetNumWhoResults()
-	playerLimit = playerLimit and tonumber(playerLimit) or whoCount
-	skipClass = skipClass and skipClass:lower() or nil
-	if messageText and messageText ~= "" and whoCount and whoCount > 0 then
-		local sentCount = 0
-		for i = 1, whoCount do
-			if sentCount >= playerLimit then break end
-			local info = C_FriendList.GetWhoInfo(i)
-			if info and info.fullName then
-				if not skipClass or info.classStr:lower() ~= skipClass then
-					SendChatMessage(messageText, "WHISPER", nil, info.fullName)
-					sentCount = sentCount + 1
-				end
-			end
-		end
-	end
+local function whisperWho(input)
+    if input:match("^%s*reset%s*$") then
+        resetIgnoreList()
+        return
+    end
+    local limit, skip, text = parseWhoParams(input)
+    local count = C_FriendList.GetNumWhoResults()
+    limit = limit and tonumber(limit) or count
+    skip = skip and skip:lower() or nil
+    if text and text ~= "" and count > 0 then
+        local sent = 0
+        for i = 1, count do
+            if sent >= limit then break end
+            local info = C_FriendList.GetWhoInfo(i)
+            if info and info.fullName then
+                if not skip or info.classStr:lower() ~= skip then
+                    SendChatMessage(text, "WHISPER", nil, info.fullName)
+                    sent = sent + 1
+                end
+            end
+        end
+    end
 end
 
-local function sendWhoWhisperSkip(commandString)
-	if commandString:match("^%s*reset%s*$") then
-		resetIgnoreList()
-		return
-	end
-	initIgnoreList()
-	local playerLimit, skipClass, messageText = getWhisperParams(commandString)
-	local whoCount = C_FriendList.GetNumWhoResults()
-	playerLimit = playerLimit and tonumber(playerLimit) or whoCount
-	skipClass = skipClass and skipClass:lower() or nil
-	if messageText and messageText ~= "" and whoCount and whoCount > 0 then
-		local sentCount = 0
-		for i = 1, whoCount do
-			if sentCount >= playerLimit then break end
-			local info = C_FriendList.GetWhoInfo(i)
-			if info and info.fullName then
-				local playerKey = info.fullName
-				if (not skipClass or info.classStr:lower() ~= skipClass) and not ChitChatClassicDB.MultiWhisperIgnore[playerKey] then
-					SendChatMessage(messageText, "WHISPER", nil, info.fullName)
-					ChitChatClassicDB.MultiWhisperIgnore[playerKey] = true
-					sentCount = sentCount + 1
-				end
-			end
-		end
-	end
+local function whisperWhoOnce(input)
+    if input:match("^%s*reset%s*$") then
+        resetIgnoreList()
+        return
+    end
+    initIgnoreList()
+    local limit, skip, text = parseWhoParams(input)
+    local count = C_FriendList.GetNumWhoResults()
+    limit = limit and tonumber(limit) or count
+    skip = skip and skip:lower() or nil
+    if text and text ~= "" and count > 0 then
+        local sent = 0
+        for i = 1, count do
+            if sent >= limit then break end
+            local info = C_FriendList.GetWhoInfo(i)
+            if info and info.fullName then
+                if (not skip or info.classStr:lower() ~= skip) and not ChitChatClassicDB.MultiWhisperIgnore[info.fullName] then
+                    SendChatMessage(text, "WHISPER", nil, info.fullName)
+                    ChitChatClassicDB.MultiWhisperIgnore[info.fullName] = true
+                    sent = sent + 1
+                end
+            end
+        end
+    end
 end
 
 SLASH_WHISPERTARGET1 = "/wt"
-SlashCmdList["WHISPERTARGET"] = sendTargetWhisper
+SlashCmdList["WHISPERTARGET"] = whisperTarget
 
 SLASH_WHISPERTARGET_SKIP1 = "/wt-once"
-SlashCmdList["WHISPERTARGET_SKIP"] = sendTargetWhisperProtected
+SlashCmdList["WHISPERTARGET_SKIP"] = whisperTargetOnce
 
 SLASH_WHISPERWHO1 = "/ww"
-SlashCmdList["WHISPERWHO"] = sendWhoWhisper
+SlashCmdList["WHISPERWHO"] = whisperWho
 
 SLASH_WHISPERWHO_SKIP1 = "/ww-once"
-SlashCmdList["WHISPERWHO_SKIP"] = sendWhoWhisperSkip
+SlashCmdList["WHISPERWHO_SKIP"] = whisperWhoOnce
 
 local colorFrame = CreateFrame("Frame")
 colorFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
 colorFrame:RegisterEvent("UPDATE_CHAT_COLOR")
 colorFrame:SetScript("OnEvent", function()
-	local base = ChatTypeInfo["WHISPER_INFORM"]
-	if not base then return end
-	local incoming = ChatTypeInfo["WHISPER"]
-	if not incoming then return end
-	incoming.r = base.r + (1 - base.r) * 0.5
-	incoming.g = base.g + (1 - base.g) * 0.5
-	incoming.b = base.b + (1 - base.b) * 0.5
+    local outgoing = ChatTypeInfo["WHISPER_INFORM"]
+    if not outgoing then return end
+    local incoming = ChatTypeInfo["WHISPER"]
+    if not incoming then return end
+    incoming.r = outgoing.r + (1 - outgoing.r) * 0.5
+    incoming.g = outgoing.g + (1 - outgoing.g) * 0.5
+    incoming.b = outgoing.b + (1 - outgoing.b) * 0.5
 end)
 
 hooksecurefunc("ChatEdit_UpdateHeader", function(editBox)
-	local chatType = editBox:GetAttribute("chatType")
-	if chatType == "WHISPER" then
-		local info = ChatTypeInfo["WHISPER_INFORM"]
-		if not info then return end
-		editBox:SetTextColor(info.r, info.g, info.b)
-		if editBox.header then
-			editBox.header:SetTextColor(info.r, info.g, info.b)
-		end
-	end
+    if editBox:GetAttribute("chatType") == "WHISPER" then
+        local info = ChatTypeInfo["WHISPER_INFORM"]
+        if not info then return end
+        editBox:SetTextColor(info.r, info.g, info.b)
+        if editBox.header then
+            editBox.header:SetTextColor(info.r, info.g, info.b)
+        end
+    end
 end)

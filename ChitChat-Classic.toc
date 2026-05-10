@@ -1,6 +1,6 @@
-## Interface: 11504
+## Interface: 11570
 ## Title: ChitChat Classic
-## Notes: Enhanced chat tools for World of Warcraft Classic.
+## Notes: Chat scanning, whisper tools, and reply utilities.
 ## Author: MIYANKO
 ## Version: 1.0.0
 ## SavedVariables: ChitChatClassicDB

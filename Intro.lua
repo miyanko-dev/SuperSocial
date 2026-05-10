@@ -1,33 +1,32 @@
-local YELLOW = "|cFFFDE89B"
-local RESET  = "|r"
+local YELLOW = "|cffffff00"
+local RESET = "|r"
 
-local function printCommands()
-	print(YELLOW .. "[/cs KEYWORD]" .. RESET .. ": Monitor chat for a keyword")
-	print(YELLOW .. "[/cs WORD AND WORD]" .. RESET .. ": Match both words")
-	print(YELLOW .. "[/cs WORD OR WORD]" .. RESET .. ": Match either word")
-	print(YELLOW .. "[/cs WORD NOT WORD]" .. RESET .. ": Match first, exclude second")
-	print(YELLOW .. "[/cs]" .. RESET .. ": Stop scanning")
-	print(YELLOW .. "[/wt MESSAGE]" .. RESET .. ": Whisper your current target")
-	print(YELLOW .. "[/wt-once MESSAGE]" .. RESET .. ": Whisper target (one-time only)")
-	print(YELLOW .. "[/ww MESSAGE]" .. RESET .. ": Whisper everyone in /who results")
-	print(YELLOW .. "[/ww N MESSAGE]" .. RESET .. ": Whisper first N players in /who results")
-	print(YELLOW .. "[/ww -CLASS MESSAGE]" .. RESET .. ": Whisper /who results, excluding a class")
-	print(YELLOW .. "[/ww-once MESSAGE]" .. RESET .. ": Whisper /who results (one-time only)")
-	print(YELLOW .. "[/ww reset]" .. RESET .. ": Clear the persistent ignore list")
-	print(YELLOW .. "[/rr MESSAGE]" .. RESET .. ": Reply to all recent whisperers")
-	print(YELLOW .. "[/rr N MESSAGE]" .. RESET .. ": Reply to the last N whisperers")
-	print(YELLOW .. "[/rr reset]" .. RESET .. ": Clear the session reply list")
-	print(YELLOW .. "[/port]" .. RESET .. ": Find mages in your current zone")
-	print(YELLOW .. "[/port ZONE]" .. RESET .. ": Find warlocks in the specified zone")
+local function printHelp()
+    print(YELLOW .. "[ChitChat]:" .. RESET .. " commands:")
+    print("  /cs KEYWORD            scan chat for a keyword")
+    print("  /cs WORD AND WORD      match both words")
+    print("  /cs WORD OR WORD       match either word")
+    print("  /cs WORD NOT WORD      match first, exclude second")
+    print("  /cs                    stop scanning")
+    print("  /wt MESSAGE            whisper your current target")
+    print("  /wt-once MESSAGE       whisper target (one-time only)")
+    print("  /ww MESSAGE            whisper everyone in /who results")
+    print("  /ww N MESSAGE          whisper first N players in /who results")
+    print("  /ww -CLASS MESSAGE     whisper /who results, excluding a class")
+    print("  /ww-once MESSAGE       whisper /who results (one-time only)")
+    print("  /ww reset              clear the persistent ignore list")
+    print("  /rr MESSAGE            reply to all recent whisperers")
+    print("  /rr N MESSAGE          reply to the last N whisperers")
+    print("  /rr reset              clear the session reply list")
+    print("  /port                  find mages in your current zone")
+    print("  /port ZONE             find warlocks in the specified zone")
 end
 
-local loginFrame = CreateFrame("Frame")
-loginFrame:RegisterEvent("PLAYER_LOGIN")
-loginFrame:SetScript("OnEvent", function()
-	print(YELLOW .. "ChitChat Classic loaded." .. RESET .. " Type /chitchat for commands.")
+local frame = CreateFrame("Frame")
+frame:RegisterEvent("PLAYER_LOGIN")
+frame:SetScript("OnEvent", function()
+    print(YELLOW .. "[ChitChat]:" .. RESET .. " loaded. Type /chitchat for commands.")
 end)
 
 SLASH_CHITCHAT1 = "/chitchat"
-SlashCmdList["CHITCHAT"] = function(msg)
-	printCommands()
-end
+SlashCmdList["CHITCHAT"] = printHelp
