@@ -8,7 +8,7 @@ local recentSet = {}
 local repliedSet = {}
 
 local function announce(msg)
-    print(YELLOW .. "[ChitChat]:" .. RESET .. " " .. msg)
+    print(YELLOW .. "[GetInTouch]:" .. RESET .. " " .. msg)
 end
 
 local function replyRecent(input)

@@ -2,19 +2,19 @@ local YELLOW = "|cffffff00"
 local RESET = "|r"
 
 local function announce(msg)
-    print(YELLOW .. "[ChitChat]:" .. RESET .. " " .. msg)
+    print(YELLOW .. "[GetInTouch]:" .. RESET .. " " .. msg)
 end
 
 local function initIgnoreList()
-    if not ChitChatClassicDB then ChitChatClassicDB = {} end
-    if type(ChitChatClassicDB.MultiWhisperIgnore) ~= "table" then
-        ChitChatClassicDB.MultiWhisperIgnore = {}
+    if not GetInTouchClassicDB then GetInTouchClassicDB = {} end
+    if type(GetInTouchClassicDB.MultiWhisperIgnore) ~= "table" then
+        GetInTouchClassicDB.MultiWhisperIgnore = {}
     end
 end
 
 local function resetIgnoreList()
-    if ChitChatClassicDB and ChitChatClassicDB.MultiWhisperIgnore then
-        ChitChatClassicDB.MultiWhisperIgnore = {}
+    if GetInTouchClassicDB and GetInTouchClassicDB.MultiWhisperIgnore then
+        GetInTouchClassicDB.MultiWhisperIgnore = {}
         announce("ignore list cleared.")
     else
         announce("ignore list is already empty.")
@@ -41,9 +41,9 @@ local function whisperTargetOnce(text)
     if UnitExists("target") and UnitIsPlayer("target") then
         local name = UnitName("target")
         initIgnoreList()
-        if not ChitChatClassicDB.MultiWhisperIgnore[name] then
+        if not GetInTouchClassicDB.MultiWhisperIgnore[name] then
             SendChatMessage(text, "WHISPER", nil, name)
-            ChitChatClassicDB.MultiWhisperIgnore[name] = true
+            GetInTouchClassicDB.MultiWhisperIgnore[name] = true
         else
             announce(name .. " already contacted.")
         end
@@ -107,9 +107,9 @@ local function whisperWhoOnce(input)
             if sent >= limit then break end
             local info = C_FriendList.GetWhoInfo(i)
             if info and info.fullName then
-                if (not skip or info.classStr:lower() ~= skip) and not ChitChatClassicDB.MultiWhisperIgnore[info.fullName] then
+                if (not skip or info.classStr:lower() ~= skip) and not GetInTouchClassicDB.MultiWhisperIgnore[info.fullName] then
                     SendChatMessage(text, "WHISPER", nil, info.fullName)
-                    ChitChatClassicDB.MultiWhisperIgnore[info.fullName] = true
+                    GetInTouchClassicDB.MultiWhisperIgnore[info.fullName] = true
                     sent = sent + 1
                 end
             end

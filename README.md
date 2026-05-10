@@ -1,6 +1,6 @@
-# ChitChat-Classic
+# GetInTouch-Classic
 
-Enhanced chat tools for World of Warcraft Classic.
+Chat scanning, whisper tools, and reply utilities for WoW Classic 1.15.x.
 
 ## Features
 
@@ -11,7 +11,7 @@ Enhanced chat tools for World of Warcraft Classic.
 
 ## Commands
 
-Type `/chitchat` in-game to open the command reference.
+Type `/getintouch` in-game to open the command reference.
 
 ### Chat Scanning
 

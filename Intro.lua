@@ -2,7 +2,7 @@ local YELLOW = "|cffffff00"
 local RESET = "|r"
 
 local function printHelp()
-    print(YELLOW .. "[ChitChat]:" .. RESET .. " commands:")
+    print(YELLOW .. "[GetInTouch]:" .. RESET .. " commands:")
     print("  /cs KEYWORD            scan chat for a keyword")
     print("  /cs WORD AND WORD      match both words")
     print("  /cs WORD OR WORD       match either word")
@@ -25,8 +25,8 @@ end
 local frame = CreateFrame("Frame")
 frame:RegisterEvent("PLAYER_LOGIN")
 frame:SetScript("OnEvent", function()
-    print(YELLOW .. "[ChitChat]:" .. RESET .. " loaded. Type /chitchat for commands.")
+    print(YELLOW .. "[GetInTouch]:" .. RESET .. " loaded. Type /getintouch for commands.")
 end)
 
-SLASH_CHITCHAT1 = "/chitchat"
-SlashCmdList["CHITCHAT"] = printHelp
+SLASH_GETINTOUCH1 = "/getintouch"
+SlashCmdList["GETINTOUCH"] = printHelp

@@ -96,12 +96,12 @@ SlashCmdList["CHATSCAN"] = function(input)
     if input == "" then
         scanExpr = {}
         scanFrame:UnregisterEvent("CHAT_MSG_CHANNEL")
-        print(YELLOW .. "[ChitChat]:" .. RESET .. " scan disabled.")
+        print(YELLOW .. "[GetInTouch]:" .. RESET .. " scan disabled.")
     else
         scanExpr = parseExpr(input)
         if not scanFrame:IsEventRegistered("CHAT_MSG_CHANNEL") then
             scanFrame:RegisterEvent("CHAT_MSG_CHANNEL")
         end
-        print(YELLOW .. "[ChitChat]:" .. RESET .. " scanning for " .. input)
+        print(YELLOW .. "[GetInTouch]:" .. RESET .. " scanning for " .. input)
     end
 end
