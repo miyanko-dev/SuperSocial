@@ -117,6 +117,59 @@ local function whisperWhoOnce(input)
     end
 end
 
+local function getAuctionatorSellers()
+    local ref = Auctionator and Auctionator.State and Auctionator.State.BuyFrameRef
+    if not ref or not ref:IsShown() then return nil end
+    local dp = ref.CurrentPrices and ref.CurrentPrices.SearchDataProvider
+    if not dp or not dp.allAuctions then return nil end
+    local sellers = {}
+    local me = UnitName("player")
+    for _, auction in ipairs(dp.allAuctions) do
+        local name = tostring(auction.info[14])
+        if name and name ~= "" and name ~= me then
+            sellers[name] = true
+        end
+    end
+    return sellers
+end
+
+local function getNativeAHSellers()
+    local count = GetNumAuctionItems("list")
+    if count == 0 then return nil end
+    local sellers = {}
+    local me = UnitName("player")
+    for i = 1, count do
+        local _, _, _, _, _, _, _, _, _, _, _, _, _, owner, ownerFullName = GetAuctionItemInfo("list", i)
+        local name = ownerFullName or owner
+        if name and name ~= "" and name ~= me then
+            sellers[name] = true
+        end
+    end
+    return sellers
+end
+
+local function whisperSeller(text)
+    if not text or text == "" then
+        announce("usage: /ws MESSAGE")
+        return
+    end
+    if not AuctionFrame or not AuctionFrame:IsShown() then
+        announce("auction house is not open.")
+        return
+    end
+    local sellers = getAuctionatorSellers() or getNativeAHSellers()
+    if not sellers or not next(sellers) then
+        announce("no auction results.")
+        return
+    end
+    local numSent = 0
+    for name in pairs(sellers) do
+        SendChatMessage(text, "WHISPER", nil, name)
+        numSent = numSent + 1
+    end
+    announce("whispered " .. numSent .. " seller(s).")
+end
+
 SLASH_WHISPERTARGET1 = "/wt"
 SlashCmdList["WHISPERTARGET"] = whisperTarget
 
@@ -128,6 +181,9 @@ SlashCmdList["WHISPERWHO"] = whisperWho
 
 SLASH_WHISPERWHO_SKIP1 = "/ww-once"
 SlashCmdList["WHISPERWHO_SKIP"] = whisperWhoOnce
+
+SLASH_WHISPERSELLER1 = "/ws"
+SlashCmdList["WHISPERSELLER"] = whisperSeller
 
 local colorFrame = CreateFrame("Frame")
 colorFrame:RegisterEvent("PLAYER_ENTERING_WORLD")
