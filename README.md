@@ -1,4 +1,4 @@
-# GetInTouch-Classic
+# GetInTouch
 
 Chat scanning, whisper tools, and reply utilities for WoW Classic 1.15.x.
 

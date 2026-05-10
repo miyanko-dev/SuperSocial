@@ -1,9 +1,9 @@
 ## Interface: 11570
-## Title: GetInTouch Classic
+## Title: GetInTouch
 ## Notes: Chat scanning, whisper tools, and reply utilities for WoW Classic 1.15.x.
 ## Author: MIYANKO
 ## Version: 1.0.0
-## SavedVariables: GetInTouchClassicDB
+## SavedVariables: GetInTouchDB
 
 Intro.lua
 ChatScan.lua

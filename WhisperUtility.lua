@@ -6,15 +6,15 @@ local function announce(msg)
 end
 
 local function initIgnoreList()
-    if not GetInTouchClassicDB then GetInTouchClassicDB = {} end
-    if type(GetInTouchClassicDB.MultiWhisperIgnore) ~= "table" then
-        GetInTouchClassicDB.MultiWhisperIgnore = {}
+    if not GetInTouchDB then GetInTouchDB = {} end
+    if type(GetInTouchDB.MultiWhisperIgnore) ~= "table" then
+        GetInTouchDB.MultiWhisperIgnore = {}
     end
 end
 
 local function resetIgnoreList()
-    if GetInTouchClassicDB and GetInTouchClassicDB.MultiWhisperIgnore then
-        GetInTouchClassicDB.MultiWhisperIgnore = {}
+    if GetInTouchDB and GetInTouchDB.MultiWhisperIgnore then
+        GetInTouchDB.MultiWhisperIgnore = {}
         announce("ignore list cleared.")
     else
         announce("ignore list is already empty.")
@@ -41,9 +41,9 @@ local function whisperTargetOnce(text)
     if UnitExists("target") and UnitIsPlayer("target") then
         local name = UnitName("target")
         initIgnoreList()
-        if not GetInTouchClassicDB.MultiWhisperIgnore[name] then
+        if not GetInTouchDB.MultiWhisperIgnore[name] then
             SendChatMessage(text, "WHISPER", nil, name)
-            GetInTouchClassicDB.MultiWhisperIgnore[name] = true
+            GetInTouchDB.MultiWhisperIgnore[name] = true
         else
             announce(name .. " already contacted.")
         end
@@ -107,9 +107,9 @@ local function whisperWhoOnce(input)
             if sent >= limit then break end
             local info = C_FriendList.GetWhoInfo(i)
             if info and info.fullName then
-                if (not skip or info.classStr:lower() ~= skip) and not GetInTouchClassicDB.MultiWhisperIgnore[info.fullName] then
+                if (not skip or info.classStr:lower() ~= skip) and not GetInTouchDB.MultiWhisperIgnore[info.fullName] then
                     SendChatMessage(text, "WHISPER", nil, info.fullName)
-                    GetInTouchClassicDB.MultiWhisperIgnore[info.fullName] = true
+                    GetInTouchDB.MultiWhisperIgnore[info.fullName] = true
                     sent = sent + 1
                 end
             end
