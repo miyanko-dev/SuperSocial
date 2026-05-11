@@ -1,29 +1,35 @@
+local PREFIX = "|cffffff00[GetInTouch]:|r "
 local YELLOW = "|cffffff00"
 local RESET = "|r"
 
-local function printHelp()
-    print(YELLOW .. "[GetInTouch]:" .. RESET .. " commands:")
-    print("  /chatscan              open the chat scan panel")
-    print("  /chatscan start        start scanning with saved settings")
-    print("  /chatscan stop         stop the active scan")
-    print("  /wt MESSAGE            whisper your current target")
-    print("  /wt-once MESSAGE       whisper target (one-time only)")
-    print("  /ww MESSAGE            whisper everyone in /who results")
-    print("  /ww N MESSAGE          whisper first N players in /who results")
-    print("  /ww -CLASS MESSAGE     whisper /who results, excluding a class")
-    print("  /ww-once MESSAGE       whisper /who results (one-time only)")
-    print("  /ww reset              clear the persistent ignore list")
-    print("  /rr MESSAGE            reply to all recent whisperers")
-    print("  /rr N MESSAGE          reply to the last N whisperers")
-    print("  /rr reset              clear the session reply list")
-    print("  /port                  find mages in your current zone")
-    print("  /port ZONE             find warlocks in the specified zone")
+local function line(command, text)
+    print(YELLOW .. "[" .. command .. "]:" .. RESET .. " " .. text)
 end
 
-local frame = CreateFrame("Frame")
-frame:RegisterEvent("PLAYER_LOGIN")
-frame:SetScript("OnEvent", function()
-    print(YELLOW .. "[GetInTouch]:" .. RESET .. " loaded. Type /getintouch for commands.")
+local function printHelp()
+    print(PREFIX .. "commands:")
+    line("/cs", "open the chat scan panel")
+    line("/cs start", "start scanning with saved settings")
+    line("/cs stop", "stop the active scan")
+    line("/wt MESSAGE", "whisper your current target")
+    line("/wt+ MESSAGE", "whisper target and remember")
+    line("/ww MESSAGE", "whisper everyone in /who results")
+    line("/ww N MESSAGE", "whisper first N players in /who results")
+    line("/ww N -FILTER... MSG", "exclude players matching any class or zone filter")
+    line("/ww+ ... MESSAGE", "whisper /who results and remember")
+    line("/w-clear", "clear the remembered whisper list")
+    line("/ws MESSAGE", "whisper every seller in the open auction house")
+    line("/rr MESSAGE", "reply to all recent whisperers")
+    line("/rr N MESSAGE", "reply to the last N whisperers")
+    line("/rr reset", "clear the session reply list")
+    line("/port", "find mages in your current zone")
+    line("/port ZONE", "find warlocks in the specified zone")
+end
+
+local loader = CreateFrame("Frame")
+loader:RegisterEvent("PLAYER_LOGIN")
+loader:SetScript("OnEvent", function()
+    print(PREFIX .. "loaded. Type /getintouch for commands.")
 end)
 
 SLASH_GETINTOUCH1 = "/getintouch"

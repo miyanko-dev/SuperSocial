@@ -1,41 +1,37 @@
 # GetInTouch
 
-Chat scanning, whisper tools, and reply utilities for WoW Classic 1.15.x.
+Whisper, reply, port, and chat-scan tools for WoW Classic 1.15.x.
 
-## Features
+## Modules
 
-- **Keyword Scanning**: Monitor chat channels for specific keywords with boolean logic.
-- **Whisper Tools**: Whisper your target or everyone in your `/who` results.
-- **Reply Recent**: Reply to recent whisperers in bulk.
-- **Port Finder**: Quickly find mages or warlocks offering teleports.
-
-## Commands
-
-Type `/getintouch` in-game to open the command reference.
-
-### Chat Scanning
-
-| Command | Description |
+| File | Purpose |
 |---|---|
-| `/cs KEYWORD` | Monitor chat for a keyword |
-| `/cs WORD AND WORD` | Match messages containing both words |
-| `/cs WORD OR WORD` | Match messages containing either word |
-| `/cs WORD NOT WORD` | Match first word, exclude second |
-| `/cs` | Stop scanning |
+| `Intro.lua` | Login banner and `/getintouch` command reference |
+| `Whisper.lua` | Whisper your target, `/who` results, or auction sellers |
+| `Reply.lua` | Reply to recent whisperers in bulk |
+| `Port.lua` | Find mages or warlocks offering teleports |
+| `Scan.lua` | Monitor chat channels for keywords |
 
-### Whisper Utilities
+Type `/getintouch` in-game to see the full command list.
+
+## Whisper
 
 | Command | Description |
 |---|---|
 | `/wt MESSAGE` | Whisper your current target |
-| `/wt-once MESSAGE` | Whisper target (skips already-contacted players) |
+| `/wt+ MESSAGE` | Whisper target and remember (skipped on future `+` commands) |
 | `/ww MESSAGE` | Whisper everyone in your `/who` results |
 | `/ww N MESSAGE` | Whisper the first N players |
-| `/ww -CLASS MESSAGE` | Whisper `/who` results, excluding a class |
-| `/ww-once MESSAGE` | Whisper `/who` results (skips already-contacted players) |
-| `/ww reset` | Clear the persistent ignore list (also works with `/ww-once`) |
+| `/ww N -FILTER... MESSAGE` | Whisper first N, excluding any class or zone filter match |
+| `/ww+ ... MESSAGE` | Whisper `/who` results and remember |
+| `/w-clear` | Clear the remembered whisper list |
+| `/ws MESSAGE` | Whisper every seller in the open auction house (Auctionator or native) |
 
-### Reply to Whispers
+Filters are dash-prefixed tokens like `-warlock`, `-mage`, `-deadmines`, or `-stormwind`. Each filter is matched case-insensitively against both class and zone — a player is skipped if any filter matches either. Combine multiple filters: `/ww 10 -warlock -deadmines MESSAGE`.
+
+Incoming whispers are recoloured to a softer blend of the outgoing whisper colour, so both sides of a conversation read consistently.
+
+## Reply
 
 | Command | Description |
 |---|---|
@@ -43,9 +39,24 @@ Type `/getintouch` in-game to open the command reference.
 | `/rr N MESSAGE` | Reply to the last N whisperers |
 | `/rr reset` | Clear the session reply-tracking list |
 
-### Port Finder
+## Port
 
 | Command | Description |
 |---|---|
 | `/port` | Find mages in your current zone |
 | `/port ZONE` | Find warlocks in the specified zone |
+
+## Chat Scan
+
+| Command | Description |
+|---|---|
+| `/cs` | Toggle the chat scan panel |
+| `/cs start` | Start scanning with saved settings |
+| `/cs stop` | Stop the active scan |
+
+Inside the panel each row is one independent match (**OR** across rows). Within a row, separate keywords with commas to require all of them (**AND**). Use *Add keyword group* to add rows and the × button to remove them. Matching is case-insensitive and uses plain text (no Lua patterns).
+
+Examples:
+- Row `wts thunderfury` → matches any message containing `wts thunderfury`.
+- Row `lf, tank` → matches messages containing both `lf` and `tank` anywhere.
+- Two rows `lf, tank` and `lf, heal` → matches `lf`+`tank` OR `lf`+`heal`.

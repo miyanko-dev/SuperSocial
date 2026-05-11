@@ -1,7 +1,6 @@
 local function findPort(zone)
     local maxLevel = GetMaxPlayerLevel()
-
-    if zone ~= "" then
+    if zone and zone ~= "" then
         C_FriendList.SendWho("z-" .. zone .. " c-warlock 20-" .. maxLevel)
     else
         C_FriendList.SendWho("z-" .. GetRealZoneText() .. " c-mage 40-" .. maxLevel)
