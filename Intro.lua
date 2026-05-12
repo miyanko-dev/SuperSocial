@@ -1,4 +1,4 @@
-local PREFIX = "|cffffff00[GetInTouch]:|r "
+local PREFIX = "|cffffff00[WhisperUtility]:|r "
 local YELLOW = "|cffffff00"
 local RESET = "|r"
 
@@ -29,8 +29,8 @@ end
 local loader = CreateFrame("Frame")
 loader:RegisterEvent("PLAYER_LOGIN")
 loader:SetScript("OnEvent", function()
-    print(PREFIX .. "loaded. Type /getintouch for commands.")
+    print(PREFIX .. "loaded. Type /whisperutility for commands.")
 end)
 
-SLASH_GETINTOUCH1 = "/getintouch"
-SlashCmdList["GETINTOUCH"] = printHelp
+SLASH_WHISPERUTILITY1 = "/whisperutility"
+SlashCmdList["WHISPERUTILITY"] = printHelp

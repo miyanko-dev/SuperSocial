@@ -1,9 +1,10 @@
 ## Interface: 11570
-## Title: GetInTouch
+## Title: WhisperUtility
 ## Notes: Whisper, reply, port, and chat-scan tools for WoW Classic 1.15.x.
 ## Author: MIYANKO
 ## Version: 1.1.0
-## SavedVariables: GetInTouchDB
+## IconTexture: 134149
+## SavedVariables: WhisperUtilityDB
 
 Intro.lua
 Whisper.lua

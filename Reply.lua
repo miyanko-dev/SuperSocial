@@ -1,4 +1,4 @@
-local PREFIX = "|cffffff00[GetInTouch]:|r "
+local PREFIX = "|cffffff00[WhisperUtility]:|r "
 local MAX_RECENT = 80
 
 local recent = {}

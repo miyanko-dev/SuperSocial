@@ -1,13 +1,13 @@
-local PREFIX = "|cffffff00[GetInTouch]:|r "
+local PREFIX = "|cffffff00[WhisperUtility]:|r "
 
 local function notify(msg)
     print(PREFIX .. msg)
 end
 
 local function loadIgnore()
-    GetInTouchDB = GetInTouchDB or {}
-    GetInTouchDB.ignored = GetInTouchDB.ignored or {}
-    return GetInTouchDB.ignored
+    WhisperUtilityDB = WhisperUtilityDB or {}
+    WhisperUtilityDB.ignored = WhisperUtilityDB.ignored or {}
+    return WhisperUtilityDB.ignored
 end
 
 local function clearIgnore()
