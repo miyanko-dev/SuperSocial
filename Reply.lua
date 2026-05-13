@@ -1,4 +1,4 @@
-local PREFIX = "|cffffff00[WhisperUtility]:|r "
+local PREFIX = "|cffffff00[WhisperThemAll]:|r "
 local MAX_RECENT = 80
 
 local recent = {}

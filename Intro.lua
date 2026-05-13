@@ -1,4 +1,4 @@
-local PREFIX = "|cffffff00[WhisperUtility]:|r "
+local PREFIX = "|cffffff00[WhisperThemAll]:|r "
 local YELLOW = "|cffffff00"
 local RESET = "|r"
 
@@ -29,8 +29,8 @@ end
 local loader = CreateFrame("Frame")
 loader:RegisterEvent("PLAYER_LOGIN")
 loader:SetScript("OnEvent", function()
-    print(PREFIX .. "loaded. Type /whisperutility for commands.")
+    print(PREFIX .. "loaded. Type /whisperthemall for commands.")
 end)
 
-SLASH_WHISPERUTILITY1 = "/whisperutility"
-SlashCmdList["WHISPERUTILITY"] = printHelp
+SLASH_WHISPERTHEMALL1 = "/whisperthemall"
+SlashCmdList["WHISPERTHEMALL"] = printHelp

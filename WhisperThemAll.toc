@@ -1,10 +1,10 @@
 ## Interface: 11570
-## Title: WhisperUtility
+## Title: WhisperThemAll
 ## Notes: Whisper, reply, port, and chat-scan tools for WoW Classic 1.15.x.
 ## Author: MIYANKO
 ## Version: 1.1.0
 ## IconTexture: 134149
-## SavedVariables: WhisperUtilityDB
+## SavedVariables: WhisperThemAllDB
 
 Intro.lua
 Whisper.lua

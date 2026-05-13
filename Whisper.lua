@@ -1,13 +1,13 @@
-local PREFIX = "|cffffff00[WhisperUtility]:|r "
+local PREFIX = "|cffffff00[WhisperThemAll]:|r "
 
 local function notify(msg)
     print(PREFIX .. msg)
 end
 
 local function loadIgnore()
-    WhisperUtilityDB = WhisperUtilityDB or {}
-    WhisperUtilityDB.ignored = WhisperUtilityDB.ignored or {}
-    return WhisperUtilityDB.ignored
+    WhisperThemAllDB = WhisperThemAllDB or {}
+    WhisperThemAllDB.ignored = WhisperThemAllDB.ignored or {}
+    return WhisperThemAllDB.ignored
 end
 
 local function clearIgnore()

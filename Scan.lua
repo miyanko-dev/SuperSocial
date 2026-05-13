@@ -1,5 +1,5 @@
-local ADDON_NAME = "WhisperUtility"
-local PREFIX = "|cffffff00[WhisperUtility]:|r "
+local ADDON_NAME = "WhisperThemAll"
+local PREFIX = "|cffffff00[WhisperThemAll]:|r "
 
 local RAID_ICONS = {
     star = 1, circle = 2, diamond = 3, triangle = 4,
@@ -36,16 +36,16 @@ local function playerKey()
 end
 
 local function loadStore()
-    WhisperUtilityDB = WhisperUtilityDB or {}
-    WhisperUtilityDB.chatScan = WhisperUtilityDB.chatScan or {}
+    WhisperThemAllDB = WhisperThemAllDB or {}
+    WhisperThemAllDB.chatScan = WhisperThemAllDB.chatScan or {}
     local key = playerKey()
-    WhisperUtilityDB.chatScan[key] = WhisperUtilityDB.chatScan[key] or {
+    WhisperThemAllDB.chatScan[key] = WhisperThemAllDB.chatScan[key] or {
         inputChannels = {},
         outputs = {},
         keywords = {},
         scanEnabled = false,
     }
-    local store = WhisperUtilityDB.chatScan[key]
+    local store = WhisperThemAllDB.chatScan[key]
     store.inputChannels = store.inputChannels or {}
     store.outputs = store.outputs or {}
     store.keywords = store.keywords or {}
@@ -200,7 +200,7 @@ local function stopScan()
         scanning = false
         notify("Scan stopped.")
     end
-    local store = WhisperUtilityDB and WhisperUtilityDB.chatScan and WhisperUtilityDB.chatScan[playerKey()]
+    local store = WhisperThemAllDB and WhisperThemAllDB.chatScan and WhisperThemAllDB.chatScan[playerKey()]
     if store then store.scanEnabled = false end
 end
 
@@ -422,7 +422,7 @@ local function populateRows(store)
 end
 
 local function buildPanel()
-    local f = CreateFrame("Frame", "WhisperUtilityChatScanPanel", UIParent, "BackdropTemplate")
+    local f = CreateFrame("Frame", "WhisperThemAllChatScanPanel", UIParent, "BackdropTemplate")
     f:SetSize(360, 460)
     f:SetPoint("CENTER")
     f:SetFrameStrata("DIALOG")
@@ -577,7 +577,7 @@ local function buildPanel()
         f:SetHeight(headerH + channelsBlock + SECTION_GAP + keywordsBlock + SECTION_GAP + outputsBlock + footerBlock)
     end)
 
-    tinsert(UISpecialFrames, "WhisperUtilityChatScanPanel")
+    tinsert(UISpecialFrames, "WhisperThemAllChatScanPanel")
     f:Hide()
     return f
 end

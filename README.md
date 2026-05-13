@@ -1,4 +1,4 @@
-# WhisperUtility
+# WhisperThemAll
 
 Whisper, reply, port, and chat-scan tools for WoW Classic 1.15.x.
 
@@ -6,13 +6,13 @@ Whisper, reply, port, and chat-scan tools for WoW Classic 1.15.x.
 
 | File | Purpose |
 |---|---|
-| `Intro.lua` | Login banner and `/whisperutility` command reference |
+| `Intro.lua` | Login banner and `/whisperthemall` command reference |
 | `Whisper.lua` | Whisper your target, `/who` results, or auction sellers |
 | `Reply.lua` | Reply to recent whisperers in bulk |
 | `Port.lua` | Find mages or warlocks offering teleports |
 | `Scan.lua` | Monitor chat channels for keywords |
 
-Type `/whisperutility` in-game to see the full command list.
+Type `/whisperthemall` in-game to see the full command list.
 
 ## Whisper
 
