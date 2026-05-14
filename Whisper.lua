@@ -1,9 +1,13 @@
 local PREFIX = "|cffffff00[WhisperThemAll]:|r "
 local SEND_INTERVAL = 0.2
+local BURST_SIZE = 10
+local BURST_COOLDOWN = 10
 local WS_DEFAULT_CAP = 25
 
 local sendQueue = {}
 local sendTicker = nil
+local sentInBurst = 0
+local paused = false
 local applyingColor = false
 local ignorePanel
 
@@ -44,25 +48,54 @@ local function clearIgnore()
     end
 end
 
--- Pace SendChatMessage at SEND_INTERVAL so mass whispers stay under the server "you can't do that yet" cap
-local function popAndSend()
-    local item = table.remove(sendQueue, 1)
-    if item then
-        SendChatMessage(item.text, "WHISPER", nil, item.target)
-    end
-    if #sendQueue == 0 and sendTicker then
+-- Pace SendChatMessage at SEND_INTERVAL and pause after BURST_SIZE to stay under the server whisper cap
+local popAndSend
+local function startTicker()
+    if sendTicker or paused then return end
+    if #sendQueue == 0 then return end
+    sendTicker = C_Timer.NewTicker(SEND_INTERVAL, popAndSend)
+end
+
+local function stopTicker()
+    if sendTicker then
         sendTicker:Cancel()
         sendTicker = nil
     end
 end
 
+popAndSend = function()
+    if paused then return end
+    local item = table.remove(sendQueue, 1)
+    if item then
+        SendChatMessage(item.text, "WHISPER", nil, item.target)
+        sentInBurst = sentInBurst + 1
+    end
+    if #sendQueue == 0 then
+        stopTicker()
+        sentInBurst = 0
+        return
+    end
+    if sentInBurst >= BURST_SIZE then
+        stopTicker()
+        paused = true
+        print(PREFIX .. string.format("Pausing %ds to avoid the whisper rate cap (%d left).",
+            BURST_COOLDOWN, #sendQueue))
+        C_Timer.After(BURST_COOLDOWN, function()
+            paused = false
+            sentInBurst = 0
+            if #sendQueue > 0 then
+                popAndSend()
+                startTicker()
+            end
+        end)
+    end
+end
+
 local function enqueueWhisper(text, target)
     sendQueue[#sendQueue + 1] = { text = text, target = target }
-    if sendTicker then return end
+    if sendTicker or paused then return end
     popAndSend()
-    if #sendQueue > 0 then
-        sendTicker = C_Timer.NewTicker(SEND_INTERVAL, popAndSend)
-    end
+    startTicker()
 end
 
 local function whisperTarget(text, remember)
