@@ -358,17 +358,13 @@ local function toggleIgnorePanel()
 end
 
 SLASH_WHISPERTARGET1 = "/wt"
-SlashCmdList["WHISPERTARGET"] = function(text)
-    text = text or ""
-    if text:match("^%s*list%s*$") then
-        toggleIgnorePanel()
-        return
-    end
-    whisperTarget(text, false)
-end
+SlashCmdList["WHISPERTARGET"] = function(text) whisperTarget(text or "", false) end
 
 SLASH_WHISPERTARGETPLUS1 = "/wt+"
 SlashCmdList["WHISPERTARGETPLUS"] = function(text) whisperTarget(text, true) end
+
+SLASH_WHISPERLIST1 = "/w-list"
+SlashCmdList["WHISPERLIST"] = toggleIgnorePanel
 
 SLASH_WHISPERWHO1 = "/ww"
 SlashCmdList["WHISPERWHO"] = function(input) whisperWho(input, false) end

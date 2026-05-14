@@ -17,7 +17,7 @@ local COMMAND_SECTIONS = {
         rows = {
             { "/wt MESSAGE", "whisper your current target" },
             { "/wt+ MESSAGE", "whisper target and remember" },
-            { "/wt list", "open the remembered-name list" },
+            { "/w-list", "open the remembered-name list" },
         },
     },
     {

@@ -20,7 +20,7 @@ Type `/whisperthemall` in-game to open the command panel. The login banner is of
 |---|---|
 | `/wt MESSAGE` | Whisper your current target |
 | `/wt+ MESSAGE` | Whisper target and remember (skipped on future `+` commands) |
-| `/wt list` | Open the remembered-name list (remove individual entries) |
+| `/w-list` | Open the remembered-name list (remove individual entries) |
 | `/ww MESSAGE` | Whisper everyone in your `/who` results |
 | `/ww N MESSAGE` | Whisper the first N players |
 | `/ww N -FILTER... MESSAGE` | Whisper first N, excluding any class or zone filter match |
