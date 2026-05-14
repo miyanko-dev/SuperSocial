@@ -561,12 +561,29 @@ local function buildPanel()
     local startBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     startBtn:SetSize(100, BTN_H)
     startBtn:SetPoint("BOTTOMRIGHT", -PAD, PAD)
-    startBtn:SetText("Start Scan")
     local startTex = startBtn:GetNormalTexture()
-    if startTex then startTex:SetVertexColor(1, 0.35, 0.35) end
     local startHi = startBtn:GetHighlightTexture()
-    if startHi then startHi:SetVertexColor(1, 0.5, 0.5) end
+
+    local function refreshStartBtn()
+        if scanning then
+            startBtn:SetText("Stop")
+            if startTex then startTex:SetVertexColor(1, 0.35, 0.35) end
+            if startHi then startHi:SetVertexColor(1, 0.5, 0.5) end
+        else
+            startBtn:SetText("Start")
+            if startTex then startTex:SetVertexColor(1, 1, 1) end
+            if startHi then startHi:SetVertexColor(1, 1, 1) end
+        end
+    end
+    f.refreshStartBtn = refreshStartBtn
+    refreshStartBtn()
+
     startBtn:SetScript("OnClick", function()
+        if scanning then
+            stopScan()
+            refreshStartBtn()
+            return
+        end
         local store = loadStore()
         store.keywords = collectKeywords()
         notify("Settings saved.")
@@ -605,6 +622,7 @@ local function buildPanel()
         outputContainer:SetHeight(math.max(outHeight, 16))
 
         soundCheck:SetChecked(store.playSound ~= false)
+        refreshStartBtn()
 
         local LABEL_H = 16
         local OPTIONS_H = 20
