@@ -29,11 +29,11 @@ end
 local function replyRecent(input)
     if input == "reset" then
         wipe(replied)
-        notify("reply list cleared.")
+        notify("Reply list cleared.")
         return
     end
     if #recent == 0 then
-        notify("no players have whispered you yet.")
+        notify("No players have whispered you yet.")
         return
     end
     local count, text = input:match("^(%d+)%s+(.+)$")
@@ -44,7 +44,7 @@ local function replyRecent(input)
         count = tonumber(count)
     end
     if not text or text == "" then
-        notify("usage: /rr MESSAGE or /rr N MESSAGE")
+        notify("Usage: /rr MESSAGE or /rr N MESSAGE")
         return
     end
     local session = {}

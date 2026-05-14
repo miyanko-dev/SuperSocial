@@ -1,4 +1,11 @@
 local PREFIX = "|cffffff00[WhisperThemAll]:|r "
+local SEND_INTERVAL = 0.2
+local WS_DEFAULT_CAP = 25
+
+local sendQueue = {}
+local sendTicker = nil
+local applyingColor = false
+local ignorePanel
 
 local function notify(msg)
     print(PREFIX .. msg)
@@ -13,20 +20,44 @@ end
 local function clearIgnore()
     local ignored = loadIgnore()
     if next(ignored) == nil then
-        notify("ignore list is already empty.")
+        notify("Ignore list is already empty.")
         return
     end
     wipe(ignored)
-    notify("ignore list cleared.")
+    notify("Ignore list cleared.")
+    if ignorePanel and ignorePanel:IsShown() then
+        ignorePanel:Refresh()
+    end
+end
+
+-- Pace SendChatMessage at SEND_INTERVAL so mass whispers stay under the server "you can't do that yet" cap
+local function popAndSend()
+    local item = table.remove(sendQueue, 1)
+    if item then
+        SendChatMessage(item.text, "WHISPER", nil, item.target)
+    end
+    if #sendQueue == 0 and sendTicker then
+        sendTicker:Cancel()
+        sendTicker = nil
+    end
+end
+
+local function enqueueWhisper(text, target)
+    sendQueue[#sendQueue + 1] = { text = text, target = target }
+    if sendTicker then return end
+    popAndSend()
+    if #sendQueue > 0 then
+        sendTicker = C_Timer.NewTicker(SEND_INTERVAL, popAndSend)
+    end
 end
 
 local function whisperTarget(text, remember)
     if not text or text == "" then
-        notify("usage: /wt MESSAGE")
+        notify("Usage: /wt MESSAGE")
         return
     end
     if not (UnitExists("target") and UnitIsPlayer("target")) then
-        notify("no valid player target.")
+        notify("No valid player target.")
         return
     end
     local name = UnitName("target")
@@ -80,7 +111,10 @@ local function whisperWho(input, remember)
     local limit, excludes, text = parseWhoInput(input or "")
     if text == "" then return end
     local count = C_FriendList.GetNumWhoResults()
-    if count == 0 then return end
+    if count == 0 then
+        notify("No /who results.")
+        return
+    end
     limit = limit or count
     local ignored = remember and loadIgnore() or nil
     local sent = 0
@@ -90,73 +124,89 @@ local function whisperWho(input, remember)
         if info and info.fullName
             and not isFiltered(info, excludes)
             and not (ignored and ignored[info.fullName]) then
-            SendChatMessage(text, "WHISPER", nil, info.fullName)
+            enqueueWhisper(text, info.fullName)
             if ignored then ignored[info.fullName] = true end
             sent = sent + 1
         end
     end
-end
-
-local function getAuctionatorSellers()
-    local ref = Auctionator and Auctionator.State and Auctionator.State.BuyFrameRef
-    if not ref or not ref:IsShown() then return nil end
-    local source = ref.CurrentPrices and ref.CurrentPrices.SearchDataProvider
-    if not source or not source.allAuctions then return nil end
-    local sellers = {}
-    local me = UnitName("player")
-    for _, auction in ipairs(source.allAuctions) do
-        local name = tostring(auction.info[14])
-        if name and name ~= "" and name ~= me then
-            sellers[name] = true
-        end
+    if sent == 0 then
+        notify("No recipients after filtering.")
+    else
+        notify(string.format("Queued %d whisper(s).", sent))
     end
-    return sellers
 end
 
-local function getNativeSellers()
+local function collectAuctionSellers()
     local count = GetNumAuctionItems("list")
-    if count == 0 then return nil end
-    local sellers = {}
+    if not count or count == 0 then return nil end
+    local seen = {}
+    local order = {}
     local me = UnitName("player")
     for i = 1, count do
         local _, _, _, _, _, _, _, _, _, _, _, _, _, owner, ownerFullName = GetAuctionItemInfo("list", i)
         local name = ownerFullName or owner
-        if name and name ~= "" and name ~= me then
-            sellers[name] = true
+        if name and name ~= "" and name ~= me and not seen[name] then
+            seen[name] = true
+            order[#order + 1] = name
         end
     end
-    return sellers
+    return order
 end
+
+StaticPopupDialogs["WHISPERTHEMALL_WS_CONFIRM"] = {
+    text = "Whisper %d auction seller(s) with this message?\n\n\"%s\"",
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function(_, data)
+        if not data or not data.names then return end
+        for _, name in ipairs(data.names) do
+            enqueueWhisper(data.text, name)
+        end
+        print(PREFIX .. string.format("Queued %d whisper(s).", #data.names))
+    end,
+    timeout = 30,
+    whileDead = true,
+    hideOnEscape = true,
+    preferredIndex = 3,
+}
 
 local function whisperSellers(text)
     if not text or text == "" then
-        notify("usage: /ws MESSAGE")
+        notify("Usage: /ws MESSAGE")
         return
     end
     if not AuctionFrame or not AuctionFrame:IsShown() then
-        notify("auction house is not open.")
+        notify("Open the auction house Browse tab and run a search first.")
         return
     end
-    local sellers = getAuctionatorSellers() or getNativeSellers()
-    if not sellers or not next(sellers) then
-        notify("no auction results.")
+    local names = collectAuctionSellers()
+    if not names or #names == 0 then
+        notify("No auction results -- run a search on the Browse tab first.")
         return
     end
-    local sent = 0
-    for name in pairs(sellers) do
-        SendChatMessage(text, "WHISPER", nil, name)
-        sent = sent + 1
+    if #names > WS_DEFAULT_CAP then
+        local trimmed = #names - WS_DEFAULT_CAP
+        for i = #names, WS_DEFAULT_CAP + 1, -1 do
+            names[i] = nil
+        end
+        notify(string.format("Trimmed %d seller(s) -- capped at %d per /ws.", trimmed, WS_DEFAULT_CAP))
     end
-    notify("whispered " .. sent .. " seller(s).")
+    StaticPopup_Show("WHISPERTHEMALL_WS_CONFIRM", #names, text, { names = names, text = text })
 end
 
-local function blendWhisperColors()
+local function blendWhisperColors(_, event, arg1)
+    if event == "UPDATE_CHAT_COLOR" and arg1 ~= "WHISPER" and arg1 ~= "WHISPER_INFORM" then
+        return
+    end
+    if applyingColor then return end
     local outgoing = ChatTypeInfo["WHISPER_INFORM"]
     local incoming = ChatTypeInfo["WHISPER"]
     if not outgoing or not incoming then return end
+    applyingColor = true
     incoming.r = outgoing.r + (1 - outgoing.r) * 0.5
     incoming.g = outgoing.g + (1 - outgoing.g) * 0.5
     incoming.b = outgoing.b + (1 - outgoing.b) * 0.5
+    applyingColor = false
 end
 
 local colorWatch = CreateFrame("Frame")
@@ -164,8 +214,144 @@ colorWatch:RegisterEvent("PLAYER_ENTERING_WORLD")
 colorWatch:RegisterEvent("UPDATE_CHAT_COLOR")
 colorWatch:SetScript("OnEvent", blendWhisperColors)
 
+local function buildIgnorePanel()
+    local f = CreateFrame("Frame", "WhisperThemAllIgnorePanel", UIParent, "BackdropTemplate")
+    f:SetSize(280, 360)
+    f:SetPoint("CENTER")
+    f:SetFrameStrata("DIALOG")
+    f:SetMovable(true)
+    f:EnableMouse(true)
+    f:RegisterForDrag("LeftButton")
+    f:SetScript("OnDragStart", f.StartMoving)
+    f:SetScript("OnDragStop", f.StopMovingOrSizing)
+    f:SetClampedToScreen(true)
+    if f.SetBackdrop then
+        f:SetBackdrop({
+            bgFile = "Interface\\Tooltips\\UI-Tooltip-Background",
+            edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+            tile = true, tileSize = 16, edgeSize = 16,
+            insets = { left = 4, right = 4, top = 4, bottom = 4 },
+        })
+        f:SetBackdropColor(0, 0, 0, 0.9)
+    end
+
+    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
+    close:SetPoint("TOPRIGHT", -2, -2)
+
+    local title = f:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
+    title:SetPoint("TOP", 0, -12)
+    title:SetText("Whisper Ignore List")
+
+    local helper = f:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    helper:SetPoint("TOPLEFT", 12, -36)
+    helper:SetPoint("TOPRIGHT", -12, -36)
+    helper:SetJustifyH("LEFT")
+    helper:SetWordWrap(true)
+    helper:SetText("Names remembered by /wt+ and /ww+. Click x to remove.")
+
+    local scroll = CreateFrame("ScrollFrame", "$parentScroll", f, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", 12, -72)
+    scroll:SetPoint("BOTTOMRIGHT", -28, 44)
+
+    local content = CreateFrame("Frame", nil, scroll)
+    content:SetSize(240, 1)
+    scroll:SetScrollChild(content)
+
+    local rowPool = {}
+    local rowsActive = {}
+
+    local function releaseRows()
+        for _, row in ipairs(rowsActive) do
+            row:Hide()
+            row:ClearAllPoints()
+            rowPool[#rowPool + 1] = row
+        end
+        wipe(rowsActive)
+    end
+
+    local function acquireRow()
+        local row = table.remove(rowPool)
+        if row then
+            row:Show()
+            row.removeBtn:Show()
+            return row
+        end
+        row = CreateFrame("Frame", nil, content)
+        row:SetHeight(20)
+        local name = row:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+        name:SetPoint("LEFT", 4, 0)
+        name:SetJustifyH("LEFT")
+        row.name = name
+        local rm = CreateFrame("Button", nil, row, "UIPanelCloseButton")
+        rm:SetSize(20, 20)
+        rm:SetPoint("RIGHT", 0, 0)
+        row.removeBtn = rm
+        return row
+    end
+
+    function f:Refresh()
+        releaseRows()
+        local ignored = loadIgnore()
+        local sorted = {}
+        for n in pairs(ignored) do sorted[#sorted + 1] = n end
+        table.sort(sorted)
+        local rowHeight = 22
+        for i, n in ipairs(sorted) do
+            local row = acquireRow()
+            row:SetParent(content)
+            row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -(i - 1) * rowHeight)
+            row:SetWidth(240)
+            row.name:SetText(n)
+            row.removeBtn:SetScript("OnClick", function()
+                ignored[n] = nil
+                f:Refresh()
+            end)
+            rowsActive[#rowsActive + 1] = row
+        end
+        if #sorted == 0 then
+            local row = acquireRow()
+            row:SetParent(content)
+            row:SetPoint("TOPLEFT", content, "TOPLEFT", 0, 0)
+            row:SetWidth(240)
+            row.name:SetText("(empty)")
+            row.removeBtn:Hide()
+            rowsActive[#rowsActive + 1] = row
+        end
+        content:SetHeight(math.max(#sorted, 1) * rowHeight)
+    end
+
+    local clearBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    clearBtn:SetSize(80, 22)
+    clearBtn:SetPoint("BOTTOMLEFT", 12, 12)
+    clearBtn:SetText("Clear All")
+    clearBtn:SetScript("OnClick", function() clearIgnore() end)
+
+    local closeBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
+    closeBtn:SetSize(80, 22)
+    closeBtn:SetPoint("BOTTOMRIGHT", -12, 12)
+    closeBtn:SetText("Close")
+    closeBtn:SetScript("OnClick", function() f:Hide() end)
+
+    tinsert(UISpecialFrames, "WhisperThemAllIgnorePanel")
+    f:Hide()
+    f:SetScript("OnShow", function(self) self:Refresh() end)
+    return f
+end
+
+local function toggleIgnorePanel()
+    if not ignorePanel then ignorePanel = buildIgnorePanel() end
+    if ignorePanel:IsShown() then ignorePanel:Hide() else ignorePanel:Show() end
+end
+
 SLASH_WHISPERTARGET1 = "/wt"
-SlashCmdList["WHISPERTARGET"] = function(text) whisperTarget(text, false) end
+SlashCmdList["WHISPERTARGET"] = function(text)
+    text = text or ""
+    if text:match("^%s*list%s*$") then
+        toggleIgnorePanel()
+        return
+    end
+    whisperTarget(text, false)
+end
 
 SLASH_WHISPERTARGETPLUS1 = "/wt+"
 SlashCmdList["WHISPERTARGETPLUS"] = function(text) whisperTarget(text, true) end

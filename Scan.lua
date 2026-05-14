@@ -8,6 +8,11 @@ local RAID_ICONS = {
 
 local DEDUP_TTL = 10
 local DEDUP_MAX = 20
+local MATCH_SOUND = 3175
+local SOUND_THROTTLE = 3.0
+
+-- ChatFrame2 is always the Combat Log; it is never used as an input/output for generic chat
+local COMBAT_LOG_INDEX = 2
 
 local panel
 local channelCheckboxes = {}
@@ -25,7 +30,9 @@ local scanFrame = CreateFrame("Frame")
 local parsedGroups = {}
 local activeChannels = {}
 local activeOutputs = {}
+local activeOptions = { playSound = true }
 local recentMatches = {}
+local lastSoundTime = 0
 
 local function notify(msg)
     DEFAULT_CHAT_FRAME:AddMessage(PREFIX .. msg)
@@ -44,12 +51,14 @@ local function loadStore()
         outputs = {},
         keywords = {},
         scanEnabled = false,
+        playSound = true,
     }
     local store = WhisperThemAllDB.chatScan[key]
     store.inputChannels = store.inputChannels or {}
     store.outputs = store.outputs or {}
     store.keywords = store.keywords or {}
     if store.scanEnabled == nil then store.scanEnabled = false end
+    if store.playSound == nil then store.playSound = true end
     return store
 end
 
@@ -123,7 +132,7 @@ local function showMatch(msg, sender)
 
     local delivered = false
     for i = 1, NUM_CHAT_WINDOWS or 10 do
-        if i ~= 2 then
+        if i ~= COMBAT_LOG_INDEX then
             local name = GetChatWindowInfo and GetChatWindowInfo(i)
             if name and name ~= "" and activeOutputs[strlower(name)] then
                 local frame = _G["ChatFrame" .. i]
@@ -137,7 +146,13 @@ local function showMatch(msg, sender)
     if not delivered then
         DEFAULT_CHAT_FRAME:AddMessage(line)
     end
-    PlaySound(3175, "Master", true)
+    if activeOptions.playSound then
+        local now = GetTime()
+        if now - lastSoundTime >= SOUND_THROTTLE then
+            PlaySound(MATCH_SOUND, "Master", true)
+            lastSoundTime = now
+        end
+    end
 end
 
 scanFrame:SetScript("OnEvent", function(_, event, ...)
@@ -161,6 +176,7 @@ local function loadRuntime(store)
     for k, v in pairs(store.outputs) do
         activeOutputs[k] = v and true or false
     end
+    activeOptions.playSound = store.playSound ~= false
 end
 
 local function countTrue(t)
@@ -268,7 +284,7 @@ local function buildOutputs(parent, anchorTop, store, topGap)
 
     local entries = {}
     for i = 1, NUM_CHAT_WINDOWS or 10 do
-        if i ~= 2 then
+        if i ~= COMBAT_LOG_INDEX then
             local name = GetChatWindowInfo and GetChatWindowInfo(i)
             if name and name ~= "" then
                 entries[#entries + 1] = { index = i, name = name }
@@ -513,6 +529,29 @@ local function buildPanel()
     outputContainer:SetPoint("RIGHT", f, "RIGHT", -PAD, 0)
     outputContainer:SetHeight(20)
 
+    local optionsLabel = f:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    optionsLabel:SetPoint("TOPLEFT", outputContainer, "BOTTOMLEFT", 0, -SECTION_GAP)
+    optionsLabel:SetText("Options")
+
+    local soundCheck = CreateFrame("CheckButton", nil, f, "UICheckButtonTemplate")
+    soundCheck:SetSize(20, 20)
+    soundCheck:SetPoint("TOPLEFT", optionsLabel, "BOTTOMLEFT", 0, -LABEL_GAP)
+    if soundCheck.Text then
+        soundCheck.Text:SetText("Play sound on match")
+        soundCheck.Text:SetFontObject(GameFontHighlightSmall)
+    else
+        local fs = soundCheck:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        fs:SetPoint("LEFT", soundCheck, "RIGHT", 2, 0)
+        fs:SetText("Play sound on match")
+    end
+    soundCheck:SetScript("OnClick", function(self)
+        local store = loadStore()
+        local checked = self:GetChecked() and true or false
+        store.playSound = checked
+        activeOptions.playSound = checked
+    end)
+    f.soundCheck = soundCheck
+
     local closeBtn = CreateFrame("Button", nil, f, "UIPanelButtonTemplate")
     closeBtn:SetSize(80, BTN_H)
     closeBtn:SetPoint("BOTTOMLEFT", PAD, PAD)
@@ -565,7 +604,10 @@ local function buildPanel()
         local _, outHeight = buildOutputs(outputContainer, outputsHelper, store, HELPER_GAP)
         outputContainer:SetHeight(math.max(outHeight, 16))
 
+        soundCheck:SetChecked(store.playSound ~= false)
+
         local LABEL_H = 16
+        local OPTIONS_H = 20
         local keywordsHelperH = math.max(keywordsHelper:GetStringHeight(), 28)
         local channelsHelperH = math.max(channelsHelper:GetStringHeight(), 16)
         local outputsHelperH = math.max(outputsHelper:GetStringHeight(), 28)
@@ -573,8 +615,9 @@ local function buildPanel()
         local channelsBlock = LABEL_H + LABEL_GAP + channelsHelperH + channelsHeight
         local keywordsBlock = LABEL_H + LABEL_GAP + keywordsHelperH + HELPER_GAP + rowsHeight + HELPER_GAP + BTN_H
         local outputsBlock = LABEL_H + LABEL_GAP + outputsHelperH + outHeight
+        local optionsBlock = LABEL_H + LABEL_GAP + OPTIONS_H
         local footerBlock = SECTION_GAP + BTN_H + PAD
-        f:SetHeight(headerH + channelsBlock + SECTION_GAP + keywordsBlock + SECTION_GAP + outputsBlock + footerBlock)
+        f:SetHeight(headerH + channelsBlock + SECTION_GAP + keywordsBlock + SECTION_GAP + outputsBlock + SECTION_GAP + optionsBlock + footerBlock)
     end)
 
     tinsert(UISpecialFrames, "WhisperThemAllChatScanPanel")
