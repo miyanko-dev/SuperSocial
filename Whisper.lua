@@ -11,10 +11,24 @@ local function notify(msg)
     print(PREFIX .. msg)
 end
 
+local function playerKey()
+    return (UnitName("player") or "?") .. "-" .. (GetRealmName() or "?")
+end
+
 local function loadIgnore()
     WhisperThemAllDB = WhisperThemAllDB or {}
-    WhisperThemAllDB.ignored = WhisperThemAllDB.ignored or {}
-    return WhisperThemAllDB.ignored
+    WhisperThemAllDB.ignoredByChar = WhisperThemAllDB.ignoredByChar or {}
+    local key = playerKey()
+    local bucket = WhisperThemAllDB.ignoredByChar[key] or {}
+    WhisperThemAllDB.ignoredByChar[key] = bucket
+    -- migrate the legacy account-wide list into the current character on first load
+    if WhisperThemAllDB.ignored then
+        for name in pairs(WhisperThemAllDB.ignored) do
+            bucket[name] = true
+        end
+        WhisperThemAllDB.ignored = nil
+    end
+    return bucket
 end
 
 local function clearIgnore()
