@@ -80,6 +80,16 @@ popAndSend = function()
         paused = true
         print(PREFIX .. string.format("Pausing %ds to avoid the whisper rate cap (%d left).",
             BURST_COOLDOWN, #sendQueue))
+        for n = 1, 3 do
+            local at = BURST_COOLDOWN - n
+            if at > 0 then
+                C_Timer.After(at, function()
+                    if paused then
+                        print(PREFIX .. string.format("Resuming in %ds...", n))
+                    end
+                end)
+            end
+        end
         C_Timer.After(BURST_COOLDOWN, function()
             paused = false
             sentInBurst = 0
@@ -88,6 +98,19 @@ popAndSend = function()
                 startTicker()
             end
         end)
+    end
+end
+
+local function stopSending()
+    local cleared = #sendQueue
+    wipe(sendQueue)
+    stopTicker()
+    paused = false
+    sentInBurst = 0
+    if cleared == 0 then
+        notify("No whispers queued.")
+    else
+        notify(string.format("Stopped %d queued whisper(s).", cleared))
     end
 end
 
@@ -400,7 +423,13 @@ SLASH_WHISPERLIST1 = "/w-list"
 SlashCmdList["WHISPERLIST"] = toggleIgnorePanel
 
 SLASH_WHISPERWHO1 = "/ww"
-SlashCmdList["WHISPERWHO"] = function(input) whisperWho(input, false) end
+SlashCmdList["WHISPERWHO"] = function(input)
+    if input and input:match("^%s*stop%s*$") then
+        stopSending()
+        return
+    end
+    whisperWho(input, false)
+end
 
 SLASH_WHISPERWHOPLUS1 = "/ww+"
 SlashCmdList["WHISPERWHOPLUS"] = function(input) whisperWho(input, true) end
