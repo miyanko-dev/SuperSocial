@@ -1,39 +1,43 @@
 local PREFIX = "|cffffff00[WhisperThemAll]:|r "
 local WHO_COOLDOWN = 5.5
 
-local lastWho = 0
-local pendingTimer
-local pendingZone
+local lastAnnounce = 0
+local tickTimers = {}
 
-local function sendPortWho(zone)
-    lastWho = GetTime()
-    local maxLevel = GetMaxPlayerLevel()
-    if zone and zone ~= "" then
-        C_FriendList.SendWho("z-" .. zone .. " c-warlock 20-" .. maxLevel)
-    else
-        C_FriendList.SendWho("z-" .. GetRealZoneText() .. " c-mage 40-" .. maxLevel)
+local function cancelTicks()
+    for i = #tickTimers, 1, -1 do
+        local t = tickTimers[i]
+        if t and not t:IsCancelled() then t:Cancel() end
+        tickTimers[i] = nil
     end
 end
 
-local function findPort(zone)
-    local remaining = WHO_COOLDOWN - (GetTime() - lastWho)
-    if remaining > 0 then
-        pendingZone = zone
-        if pendingTimer then
-            print(PREFIX .. string.format("Replaced queued /port (%.1fs remaining).", remaining))
-            return
+local function scheduleTicks(remaining)
+    for n = 1, 3 do
+        local at = remaining - n
+        if at > 0 then
+            tickTimers[#tickTimers + 1] = C_Timer.NewTimer(at, function()
+                print(PREFIX .. string.format("/who in %ds...", n))
+            end)
         end
-        print(PREFIX .. string.format("Queued /port -- sending in %.1fs.", remaining))
-        pendingTimer = C_Timer.NewTimer(remaining, function()
-            local zoneToSend = pendingZone
-            pendingTimer = nil
-            pendingZone = nil
-            sendPortWho(zoneToSend)
-        end)
+    end
+    tickTimers[#tickTimers + 1] = C_Timer.NewTimer(remaining, function()
+        print(PREFIX .. "/who ready -- send it now.")
+    end)
+end
+
+local function announcePort()
+    local now = GetTime()
+    local remaining = WHO_COOLDOWN - (now - lastAnnounce)
+    if remaining > 0 then
+        print(PREFIX .. string.format("/who on cooldown -- %.1fs remaining.", remaining))
         return
     end
-    sendPortWho(zone)
+    lastAnnounce = now
+    cancelTicks()
+    print(PREFIX .. string.format("/who window started -- ready in %.1fs.", WHO_COOLDOWN))
+    scheduleTicks(WHO_COOLDOWN)
 end
 
 SLASH_PORT1 = "/port"
-SlashCmdList["PORT"] = findPort
+SlashCmdList["PORT"] = announcePort
