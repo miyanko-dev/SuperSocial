@@ -22,7 +22,7 @@ local COMMAND_SECTIONS = {
     {
         title = "Whisper auction sellers",
         rows = {
-            { "/ws MESSAGE", "whisper sellers in the AH Browse tab (capped, with confirm)" },
+            { "/ws MESSAGE", "whisper all sellers in the AH Browse tab" },
         },
     },
     {

@@ -1,5 +1,4 @@
 local PREFIX = "|cffffff00[WhisperThemAll]:|r "
-local WS_DEFAULT_CAP = 25
 
 local applyingColor = false
 local ignorePanel
@@ -149,23 +148,6 @@ local function collectAuctionSellers()
     return order
 end
 
-StaticPopupDialogs["WHISPERTHEMALL_WS_CONFIRM"] = {
-    text = "Whisper %d auction seller(s) with this message?\n\n\"%s\"",
-    button1 = YES,
-    button2 = NO,
-    OnAccept = function(_, data)
-        if not data or not data.names then return end
-        for _, name in ipairs(data.names) do
-            SendChatMessage(data.text, "WHISPER", nil, name)
-        end
-        print(PREFIX .. string.format("Sent %d whisper(s).", #data.names))
-    end,
-    timeout = 30,
-    whileDead = true,
-    hideOnEscape = true,
-    preferredIndex = 3,
-}
-
 local function whisperSellers(text)
     if not text or text == "" then
         notify("Usage: /ws MESSAGE")
@@ -180,14 +162,10 @@ local function whisperSellers(text)
         notify("No auction results -- run a search on the Browse tab first.")
         return
     end
-    if #names > WS_DEFAULT_CAP then
-        local trimmed = #names - WS_DEFAULT_CAP
-        for i = #names, WS_DEFAULT_CAP + 1, -1 do
-            names[i] = nil
-        end
-        notify(string.format("Trimmed %d seller(s) -- capped at %d per /ws.", trimmed, WS_DEFAULT_CAP))
+    for _, name in ipairs(names) do
+        SendChatMessage(text, "WHISPER", nil, name)
     end
-    StaticPopup_Show("WHISPERTHEMALL_WS_CONFIRM", #names, text, { names = names, text = text })
+    notify(string.format("Sent %d whisper(s).", #names))
 end
 
 local function blendWhisperColors(_, event, arg1)
