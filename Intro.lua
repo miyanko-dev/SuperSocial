@@ -2,14 +2,6 @@ local helpPanel
 
 local COMMAND_SECTIONS = {
     {
-        title = "Chat scan",
-        rows = {
-            { "/cs", "open the chat scan panel" },
-            { "/cs start", "start scanning with saved settings" },
-            { "/cs stop", "stop the active scan" },
-        },
-    },
-    {
         title = "Whisper target",
         rows = {
             { "/wt MESSAGE", "whisper your current target" },

@@ -1,6 +1,6 @@
 ## Interface: 11570
 ## Title: WhisperThemAll
-## Notes: Whisper, reply, port, and chat-scan tools for WoW Classic 1.15.x.
+## Notes: Whisper, reply, and port tools for WoW Classic 1.15.x.
 ## Author: MIYANKO
 ## Version: 1.1.0
 ## IconTexture: 134149
@@ -10,4 +10,3 @@ Intro.lua
 Whisper.lua
 Reply.lua
 Port.lua
-Scan.lua
