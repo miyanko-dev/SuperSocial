@@ -13,8 +13,8 @@ local COMMAND_SECTIONS = {
         title = "Whisper /who results",
         rows = {
             { "/ww MESSAGE", "whisper everyone in /who results" },
-            { "/ww N MESSAGE", "whisper first N players in /who results" },
-            { "/ww N -FILTER... MSG", "exclude players by class or zone filter" },
+            { "/ww -N MESSAGE", "whisper first N players in /who results" },
+            { "/ww -N -FILTER... MSG", "exclude players by class, name, or zone" },
             { "/ww+ ... MESSAGE", "whisper /who results and remember" },
             { "/wta clear", "clear the remembered whisper list" },
         },

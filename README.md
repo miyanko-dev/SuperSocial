@@ -22,13 +22,13 @@ Type `/wta` in-game to open the command panel.
 | `/wt+ MESSAGE` | Whisper target and remember (skipped on future `+` commands) |
 | `/wta list` | Open the remembered-name list (remove individual entries) |
 | `/ww MESSAGE` | Whisper everyone in your `/who` results |
-| `/ww N MESSAGE` | Whisper the first N players |
-| `/ww N -FILTER... MESSAGE` | Whisper first N, excluding any class or zone filter match |
+| `/ww -N MESSAGE` | Whisper the first N players |
+| `/ww -N -FILTER... MESSAGE` | Whisper first N, excluding any class, name, or zone filter match |
 | `/ww+ ... MESSAGE` | Whisper `/who` results and remember |
 | `/wta clear` | Clear the remembered whisper list |
 | `/ws MESSAGE` | Whisper every seller in the native auction house Browse tab |
 
-Filters are dash-prefixed tokens like `-warlock`, `-mage`, `-deadmines`, or `-stormwind`. Each filter is matched case-insensitively against both class and zone — a player is skipped if any filter matches either. Combine multiple filters: `/ww 10 -warlock -deadmines MESSAGE`.
+All options are dash-prefixed and order-independent. `-N` (a number) caps recipients; `-text` (non-number) is an exclusion filter. Each exclusion is matched case-insensitively against the player's class (exact), name (substring), and zone (substring) — a player is skipped if any filter matches any field. Combine freely: `/ww -10 -warlock -Stormwind -Jondalar MESSAGE`.
 
 Mass-whisper commands (`/ww`, `/ws`) are paced through an internal send queue to stay under the server's whisper rate cap.
 

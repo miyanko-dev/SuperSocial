@@ -68,14 +68,15 @@ local function parseWhoInput(input)
 
     local cursor = 1
     local limit
-    if tokens[cursor] and tokens[cursor]:match("^%d+$") then
-        limit = tonumber(tokens[cursor])
-        cursor = cursor + 1
-    end
-
     local excludes = {}
+
     while tokens[cursor] and tokens[cursor]:sub(1, 1) == "-" and #tokens[cursor] > 1 do
-        excludes[#excludes + 1] = tokens[cursor]:sub(2):lower()
+        local val = tokens[cursor]:sub(2)
+        if val:match("^%d+$") then
+            limit = tonumber(val)
+        else
+            excludes[#excludes + 1] = val:lower()
+        end
         cursor = cursor + 1
     end
 
@@ -90,9 +91,12 @@ local function isFiltered(info, excludes)
     if #excludes == 0 then return false end
     local class = (info.classStr or ""):lower()
     local area = (info.area or ""):lower()
+    local rawName = (info.fullName or ""):lower()
+    local name = rawName:match("^([^-]+)") or rawName
     for _, filter in ipairs(excludes) do
         if filter == class then return true end
         if area ~= "" and area:find(filter, 1, true) then return true end
+        if name ~= "" and name:find(filter, 1, true) then return true end
     end
     return false
 end
