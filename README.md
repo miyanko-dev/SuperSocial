@@ -6,13 +6,13 @@ Whisper, reply, port, and chat-scan tools for WoW Classic 1.15.x.
 
 | File | Purpose |
 |---|---|
-| `Intro.lua` | Floating command-reference panel and `/whisperthemall` slash |
+| `Intro.lua` | Floating command-reference panel and `/wta` slash |
 | `Whisper.lua` | Whisper your target, `/who` results, or auction sellers |
 | `Reply.lua` | Reply to recent whisperers in bulk |
 | `Port.lua` | Find mages or warlocks offering teleports |
 | `Scan.lua` | Monitor chat channels for keywords |
 
-Type `/whisperthemall` in-game to open the command panel. The login banner is off by default — enable with `/whisperthemall banner on`.
+Type `/wta` in-game to open the command panel.
 
 ## Whisper
 
@@ -20,12 +20,12 @@ Type `/whisperthemall` in-game to open the command panel. The login banner is of
 |---|---|
 | `/wt MESSAGE` | Whisper your current target |
 | `/wt+ MESSAGE` | Whisper target and remember (skipped on future `+` commands) |
-| `/w-list` | Open the remembered-name list (remove individual entries) |
+| `/wta list` | Open the remembered-name list (remove individual entries) |
 | `/ww MESSAGE` | Whisper everyone in your `/who` results |
 | `/ww N MESSAGE` | Whisper the first N players |
 | `/ww N -FILTER... MESSAGE` | Whisper first N, excluding any class or zone filter match |
 | `/ww+ ... MESSAGE` | Whisper `/who` results and remember |
-| `/w-clear` | Clear the remembered whisper list |
+| `/wta clear` | Clear the remembered whisper list |
 | `/ws MESSAGE` | Whisper every seller in the native auction house Browse tab |
 
 Filters are dash-prefixed tokens like `-warlock`, `-mage`, `-deadmines`, or `-stormwind`. Each filter is matched case-insensitively against both class and zone — a player is skipped if any filter matches either. Combine multiple filters: `/ww 10 -warlock -deadmines MESSAGE`.

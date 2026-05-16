@@ -1,6 +1,3 @@
-local ADDON_NAME = "WhisperThemAll"
-local PREFIX = "|cffffff00[WhisperThemAll]:|r "
-
 local helpPanel
 
 local COMMAND_SECTIONS = {
@@ -17,7 +14,7 @@ local COMMAND_SECTIONS = {
         rows = {
             { "/wt MESSAGE", "whisper your current target" },
             { "/wt+ MESSAGE", "whisper target and remember" },
-            { "/w-list", "open the remembered-name list" },
+            { "/wta list", "open the remembered-name list" },
         },
     },
     {
@@ -27,7 +24,7 @@ local COMMAND_SECTIONS = {
             { "/ww N MESSAGE", "whisper first N players in /who results" },
             { "/ww N -FILTER... MSG", "exclude players by class or zone filter" },
             { "/ww+ ... MESSAGE", "whisper /who results and remember" },
-            { "/w-clear", "clear the remembered whisper list" },
+            { "/wta clear", "clear the remembered whisper list" },
         },
     },
     {
@@ -51,22 +48,7 @@ local COMMAND_SECTIONS = {
             { "/port ZONE", "find warlocks in the specified zone" },
         },
     },
-    {
-        title = "Login banner",
-        rows = {
-            { "/whisperthemall banner on", "enable the login banner" },
-            { "/whisperthemall banner off", "disable the login banner" },
-        },
-    },
 }
-
-local function loadStore()
-    WhisperThemAllDB = WhisperThemAllDB or {}
-    if WhisperThemAllDB.showLoginBanner == nil then
-        WhisperThemAllDB.showLoginBanner = false
-    end
-    return WhisperThemAllDB
-end
 
 local function buildHelpPanel()
     local f = CreateFrame("Frame", "WhisperThemAllHelpPanel", UIParent, "BackdropTemplate")
@@ -153,32 +135,27 @@ end
 
 local function handleSlash(input)
     input = (input or ""):match("^%s*(.-)%s*$"):lower()
-    if input == "banner on" then
-        loadStore().showLoginBanner = true
-        print(PREFIX .. "Login banner enabled.")
+    if input == "clear" then
+        if WhisperThemAll and WhisperThemAll.ClearIgnore then
+            WhisperThemAll.ClearIgnore()
+        end
         return
     end
-    if input == "banner off" then
-        loadStore().showLoginBanner = false
-        print(PREFIX .. "Login banner disabled.")
+    if input == "list" then
+        if WhisperThemAll and WhisperThemAll.ToggleIgnorePanel then
+            WhisperThemAll.ToggleIgnorePanel()
+        end
         return
     end
-    print(PREFIX .. "See panel for commands.")
     showHelp()
 end
 
-local loader = CreateFrame("Frame")
-loader:RegisterEvent("ADDON_LOADED")
-loader:RegisterEvent("PLAYER_LOGIN")
-loader:SetScript("OnEvent", function(_, event, arg1)
-    if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
-        loadStore()
-    elseif event == "PLAYER_LOGIN" then
-        if loadStore().showLoginBanner then
-            print(PREFIX .. "Loaded. Type /whisperthemall for commands.")
-        end
-    end
-end)
-
-SLASH_WHISPERTHEMALL1 = "/whisperthemall"
+SLASH_WHISPERTHEMALL1 = "/wta"
 SlashCmdList["WHISPERTHEMALL"] = handleSlash
+
+local loginFrame = CreateFrame("Frame")
+loginFrame:RegisterEvent("PLAYER_LOGIN")
+loginFrame:SetScript("OnEvent", function(self)
+    print("|cffffff00[WhisperThemAll]:|r Loaded. Type /wta for available commands.")
+    self:UnregisterEvent("PLAYER_LOGIN")
+end)

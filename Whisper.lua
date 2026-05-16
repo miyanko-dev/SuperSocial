@@ -419,9 +419,6 @@ SlashCmdList["WHISPERTARGET"] = function(text) whisperTarget(text or "", false) 
 SLASH_WHISPERTARGETPLUS1 = "/wt+"
 SlashCmdList["WHISPERTARGETPLUS"] = function(text) whisperTarget(text, true) end
 
-SLASH_WHISPERLIST1 = "/w-list"
-SlashCmdList["WHISPERLIST"] = toggleIgnorePanel
-
 SLASH_WHISPERWHO1 = "/ww"
 SlashCmdList["WHISPERWHO"] = function(input)
     if input and input:match("^%s*stop%s*$") then
@@ -434,8 +431,9 @@ end
 SLASH_WHISPERWHOPLUS1 = "/ww+"
 SlashCmdList["WHISPERWHOPLUS"] = function(input) whisperWho(input, true) end
 
-SLASH_WHISPERCLEAR1 = "/w-clear"
-SlashCmdList["WHISPERCLEAR"] = clearIgnore
-
 SLASH_WHISPERSELLERS1 = "/ws"
 SlashCmdList["WHISPERSELLERS"] = whisperSellers
+
+_G.WhisperThemAll = _G.WhisperThemAll or {}
+WhisperThemAll.ClearIgnore = clearIgnore
+WhisperThemAll.ToggleIgnorePanel = toggleIgnorePanel
