@@ -75,7 +75,7 @@ local function buildHelpPanel()
     intro:SetPoint("TOPRIGHT", -12, -38)
     intro:SetJustifyH("LEFT")
     intro:SetWordWrap(true)
-    intro:SetText("Bulk-whisper, scan chat, and find ports without rebinding the chat box.")
+    intro:SetText("Bulk-whisper, reply, and find ports without rebinding the chat box.")
 
     local scroll = CreateFrame("ScrollFrame", "$parentScroll", f, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 12, -72)
