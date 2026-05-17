@@ -1,6 +1,6 @@
 # WhisperThemAll
 
-Whisper, reply, port, and chat-scan tools for WoW Classic 1.15.x.
+Whisper, reply, and port tools for WoW Classic 1.15.x.
 
 ## Modules
 
@@ -10,7 +10,6 @@ Whisper, reply, port, and chat-scan tools for WoW Classic 1.15.x.
 | `Whisper.lua` | Whisper your target, `/who` results, or auction sellers |
 | `Reply.lua` | Reply to recent whisperers in bulk |
 | `Port.lua` | Find mages or warlocks offering teleports |
-| `Scan.lua` | Monitor chat channels for keywords |
 
 Type `/wta` in-game to open the command panel.
 
@@ -52,20 +51,3 @@ Incoming whispers are recoloured to a softer blend of the outgoing whisper colou
 | `/port ZONE` | Find warlocks in the specified zone |
 
 `/port` honours the server's 5-second `/who` cooldown — repeated calls inside that window are rejected client-side.
-
-## Chat Scan
-
-| Command | Description |
-|---|---|
-| `/cs` | Toggle the chat scan panel |
-| `/cs start` | Start scanning with saved settings |
-| `/cs stop` | Stop the active scan |
-
-Inside the panel each row is one independent match (**OR** across rows). Within a row, separate keywords with commas to require all of them (**AND**). Use *Add keyword group* to add rows and the × button to remove them. Matching is case-insensitive and uses plain text (no Lua patterns).
-
-The *Options* section has a *Play sound on match* toggle; the sound is throttled to once every 3 seconds to keep chat bursts from machine-gunning the speakers.
-
-Examples:
-- Row `wts thunderfury` → matches any message containing `wts thunderfury`.
-- Row `lf, tank` → matches messages containing both `lf` and `tank` anywhere.
-- Two rows `lf, tank` and `lf, heal` → matches `lf`+`tank` OR `lf`+`heal`.
