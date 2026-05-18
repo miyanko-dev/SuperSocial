@@ -1,6 +1,6 @@
 # WhisperThemAll
 
-Whisper, reply, and port tools for WoW Classic 1.15.x.
+Whisper and reply tools for WoW Classic 1.15.x.
 
 ## Modules
 
@@ -9,7 +9,6 @@ Whisper, reply, and port tools for WoW Classic 1.15.x.
 | `Intro.lua` | Floating command-reference panel and `/wta` slash |
 | `Whisper.lua` | Whisper your target, `/who` results, or auction sellers |
 | `Reply.lua` | Reply to recent whisperers in bulk |
-| `Port.lua` | Find mages or warlocks offering teleports |
 
 Type `/wta` in-game to open the command panel.
 
@@ -42,12 +41,3 @@ Incoming whispers are recoloured to a softer blend of the outgoing whisper colou
 | `/rr MESSAGE` | Reply to all recent whisperers |
 | `/rr N MESSAGE` | Reply to the last N whisperers |
 | `/rr reset` | Clear the session reply-tracking list |
-
-## Port
-
-| Command | Description |
-|---|---|
-| `/port` | Find mages in your current zone |
-| `/port ZONE` | Find warlocks in the specified zone |
-
-`/port` honours the server's 5-second `/who` cooldown — repeated calls inside that window are rejected client-side.

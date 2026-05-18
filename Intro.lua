@@ -33,13 +33,6 @@ local COMMAND_SECTIONS = {
             { "/rr reset", "clear the session reply list" },
         },
     },
-    {
-        title = "Port",
-        rows = {
-            { "/port", "find mages in your current zone" },
-            { "/port ZONE", "find warlocks in the specified zone" },
-        },
-    },
 }
 
 local function buildHelpPanel()
@@ -75,7 +68,7 @@ local function buildHelpPanel()
     intro:SetPoint("TOPRIGHT", -12, -38)
     intro:SetJustifyH("LEFT")
     intro:SetWordWrap(true)
-    intro:SetText("Bulk-whisper, reply, and find ports without rebinding the chat box.")
+    intro:SetText("Bulk-whisper and reply without rebinding the chat box.")
 
     local scroll = CreateFrame("ScrollFrame", "$parentScroll", f, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", 12, -72)
