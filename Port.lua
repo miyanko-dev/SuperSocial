@@ -32,16 +32,17 @@ StaticPopupDialogs[CONFIRM_DIALOG] = {
 --   search      : zone string passed to /who; fall back to a parent zone when
 --                 the requested location is a subzone /who can't resolve
 --   magePortal  : true only for the six capitals mages can portal to
+--   minMageLvl  : minimum mage level required to create the portal (capitals only)
 --
--- Add new subzone or hub entries below with magePortal = false and a search
--- value pointing at the parent zone that /who actually returns results for.
+-- /port accepts only entries with magePortal = true. Add subzone or hub
+-- entries below with magePortal = false; those remain valid for /clickers.
 local ZONES = {
-    { keys = { "darnassus", "dar" },                              display = "Darnassus",     search = "Darnassus",      magePortal = true  },
-    { keys = { "stormwind", "sw" },                               display = "Stormwind",     search = "Stormwind City", magePortal = true  },
-    { keys = { "ironforge", "if" },                               display = "Ironforge",     search = "Ironforge",      magePortal = true  },
-    { keys = { "orgrimmar", "org" },                              display = "Orgrimmar",     search = "Orgrimmar",      magePortal = true  },
-    { keys = { "thunder bluff", "thunderbluff", "thunder", "tb" },display = "Thunder Bluff", search = "Thunder Bluff",  magePortal = true  },
-    { keys = { "undercity", "uc" },                               display = "Undercity",     search = "Undercity",      magePortal = true  },
+    { keys = { "darnassus", "dar" },                              display = "Darnassus",     search = "Darnassus",      magePortal = true,  minMageLvl = 50 },
+    { keys = { "stormwind", "sw" },                               display = "Stormwind",     search = "Stormwind City", magePortal = true,  minMageLvl = 40 },
+    { keys = { "ironforge", "if" },                               display = "Ironforge",     search = "Ironforge",      magePortal = true,  minMageLvl = 40 },
+    { keys = { "orgrimmar", "org" },                              display = "Orgrimmar",     search = "Orgrimmar",      magePortal = true,  minMageLvl = 40 },
+    { keys = { "thunder bluff", "thunderbluff", "thunder", "tb" },display = "Thunder Bluff", search = "Thunder Bluff",  magePortal = true,  minMageLvl = 50 },
+    { keys = { "undercity", "uc" },                               display = "Undercity",     search = "Undercity",      magePortal = true,  minMageLvl = 40 },
 
     { keys = { "booty bay", "bootybay", "bb" },                   display = "Booty Bay",     search = "Stranglethorn",  magePortal = false },
 }
@@ -188,6 +189,16 @@ local function zoneListString()
     return table.concat(out, ", ")
 end
 
+local function portZoneListString()
+    local out = {}
+    for _, z in ipairs(ZONES) do
+        if z.magePortal then
+            out[#out + 1] = string.format("%s (lvl %d+)", z.display, z.minMageLvl)
+        end
+    end
+    return table.concat(out, ", ")
+end
+
 local pending
 local watcher
 local timeoutTimer
@@ -258,14 +269,18 @@ local function onWhoComplete()
 
     local count = C_FriendList.GetNumWhoResults() or 0
     local me = UnitName("player")
+    local mageMinLvl = (ctx.mode == "port" and ctx.zone.magePortal) and ctx.zone.minMageLvl or 0
     local mages, warlocks, others = {}, {}, {}
     for i = 1, count do
         local info = C_FriendList.GetWhoInfo(i)
         local fullName = info and info.fullName
         if fullName and fullName ~= me then
             local token = classToken(info)
+            local level = (info and info.level) or 0
             if token == "MAGE" then
-                mages[#mages + 1] = fullName
+                if level >= mageMinLvl then
+                    mages[#mages + 1] = fullName
+                end
             elseif token == "WARLOCK" then
                 warlocks[#warlocks + 1] = fullName
             else
@@ -319,8 +334,8 @@ end
 
 local function handlePort(input)
     local n, zone = parseCommand(input or "", false)
-    if not zone then
-        notify("Usage: /port [N] ZONE   Known zones: " .. zoneListString())
+    if not zone or not zone.magePortal then
+        notify("Usage: /port [N] ZONE   Portal destinations: " .. portZoneListString())
         return
     end
     startWho(zone, "port", n or DEFAULT_N, nil)

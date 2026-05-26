@@ -40,22 +40,22 @@ Every option is dash-prefixed — `-N` caps recipients; each `-text` excludes by
 
 | Command | Description |
 |---|---|
-| `/port [N] ZONE` | Whisper up to N mages and up to N warlocks in the destination zone with a randomly chosen tip-ready template |
+| `/port [N] ZONE` | Whisper up to N mages and up to N warlocks in a capital city with a randomly chosen tip-ready template. ZONE must be a real mage portal destination |
 | `/clickers [N] ZONE [MESSAGE]` (alias: `/clicker`) | Whisper up to N non-warlock players in the zone to help click a summon |
 
 Both `/port` and `/clickers` show a native confirmation popup with the recipient count and a sample of the message before any whisper goes out. Click **Send** to fire them; click **Cancel** to abort. The skip list is not consulted and not modified.
 
 `ZONE` is written without a leading dash and can contain spaces (e.g. `Booty Bay`, `Thunder Bluff`). Known aliases:
 
-| Display zone | Aliases |
-|---|---|
-| Darnassus | `darnassus`, `dar` |
-| Stormwind | `stormwind`, `sw` |
-| Ironforge | `ironforge`, `if` |
-| Orgrimmar | `orgrimmar`, `org` |
-| Thunder Bluff | `thunder bluff`, `thunderbluff`, `thunder`, `tb` |
-| Undercity | `undercity`, `uc` |
-| Booty Bay | `booty bay`, `bootybay`, `bb` |
+| Display zone | Aliases | Min mage level | `/port` | `/clickers` |
+|---|---|---|---|---|
+| Stormwind | `stormwind`, `sw` | 40 | ✓ | ✓ |
+| Ironforge | `ironforge`, `if` | 40 | ✓ | ✓ |
+| Orgrimmar | `orgrimmar`, `org` | 40 | ✓ | ✓ |
+| Undercity | `undercity`, `uc` | 40 | ✓ | ✓ |
+| Darnassus | `darnassus`, `dar` | 50 | ✓ | ✓ |
+| Thunder Bluff | `thunder bluff`, `thunderbluff`, `thunder`, `tb` | 50 | ✓ | ✓ |
+| Booty Bay | `booty bay`, `bootybay`, `bb` | — | — | ✓ |
 
 Default `N` is 5.
 
@@ -65,7 +65,9 @@ Each whisper template substitutes `{name}` (the recipient's first name) and `{zo
 
 ### Mages vs. warlocks
 
-Mage whispers are only sent when the requested destination is a real mage portal target (Darnassus, Stormwind, Ironforge, Orgrimmar, Thunder Bluff, Undercity). For any other destination — including subzone fallbacks like Booty Bay — `/port` skips the mage section and only whispers warlocks.
+`/port` only accepts the six capital city portal destinations. Any other zone (including subzone fallbacks like Booty Bay or unrelated zones like Feralas) is rejected with a usage hint. Mages below the minimum level for the requested portal are skipped, so `/port Darnassus` never whispers a sub-50 mage and `/port Stormwind` never whispers a sub-40 mage. Warlock summons have no level filter.
+
+For warlock-only summon runs to non-capital hubs, use `/clickers`.
 
 ### Custom messages on `/clickers`
 
@@ -74,7 +76,7 @@ Omit `MESSAGE` to use one of the built-in clicker templates. Pass your own to ov
 ```
 /port Stormwind
 /port 3 Thunder Bluff
-/port Booty Bay
+/clickers Booty Bay
 /clickers 5 Stranglethorn
 /clickers Booty Bay help us click please
 ```
