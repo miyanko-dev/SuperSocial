@@ -1,14 +1,18 @@
-local PREFIX = "|cffffff00[Whisper Them All!]:|r "
-local COOLDOWN_SECONDS = 5 * 60
-
 local applyingColor = false
 
-local function notify(msg)
-    print(PREFIX .. msg)
+local CHAT_PREFIX = "|cff66ccffWhisperThemAll:|r "
+
+local function chatLine(text)
+    DEFAULT_CHAT_FRAME:AddMessage(CHAT_PREFIX .. text)
 end
 
-local function announce(count)
-    notify(string.format("Sending message to %d player%s.", count, count == 1 and "" or "s"))
+local function trim(s)
+    return (s or ""):gsub("^%s+", ""):gsub("%s+$", "")
+end
+
+local function plural(n, singular, multiple)
+    if n == 1 then return singular end
+    return multiple
 end
 
 local function playerKey()
@@ -32,13 +36,7 @@ local function loadSkip()
 end
 
 local function clearSkip()
-    local skip = loadSkip()
-    if next(skip) == nil then
-        notify("Skip list is already empty.")
-        return
-    end
-    wipe(skip)
-    notify("Skip list cleared.")
+    wipe(loadSkip())
 end
 
 local function loadCooldowns()
@@ -50,17 +48,21 @@ local function loadCooldowns()
     return bucket
 end
 
-local function pruneCooldowns(bucket)
-    local cutoff = time() - COOLDOWN_SECONDS
+local function pruneCooldowns(bucket, cooldownSeconds)
+    local cutoff = time() - cooldownSeconds
     for n, ts in pairs(bucket) do
         if ts < cutoff then bucket[n] = nil end
     end
 end
 
-local function isCool(bucket, name)
+local function isCool(bucket, name, cooldownSeconds)
     local ts = bucket[name]
     if not ts then return true end
-    return (time() - ts) >= COOLDOWN_SECONDS
+    return (time() - ts) >= cooldownSeconds
+end
+
+local function clearCooldowns()
+    wipe(loadCooldowns())
 end
 
 local function nameOnly(value)
@@ -87,127 +89,177 @@ local function buildGroupSet()
     return set
 end
 
-local function whisperTarget(text)
-    if not text or text == "" then
-        notify("Usage: /wt MESSAGE")
-        return
-    end
-    if not (UnitExists("target") and UnitIsPlayer("target")) then
-        notify("No valid player target.")
-        return
-    end
-    SendChatMessage(text, "WHISPER", nil, UnitName("target"))
-end
-
-local function whisperTargetPlus(text)
-    if not text or text == "" then
-        notify("Usage: /wt+ MESSAGE")
-        return
-    end
-    if not (UnitExists("target") and UnitIsPlayer("target")) then
-        notify("No valid player target.")
-        return
-    end
-    local name = UnitName("target")
-    SendChatMessage(text, "WHISPER", nil, name)
-    local skip = loadSkip()
-    skip[name] = true
-end
-
--- Consume leading dash-prefixed options. -<number> sets the cap; -<text>
--- contributes to the exclude list. The first non-dash token starts MESSAGE.
-local function parseDashOptions(input)
+local function whisperTarget(input)
+    input = trim(input or "")
     local tokens = {}
     for t in input:gmatch("%S+") do tokens[#tokens + 1] = t end
     local cursor = 1
-    local limit
-    local excludes = {}
-    while tokens[cursor] and tokens[cursor]:sub(1, 1) == "-" and #tokens[cursor] > 1 do
-        local val = tokens[cursor]:sub(2)
-        if val:match("^%d+$") then
-            limit = tonumber(val)
-        else
-            excludes[#excludes + 1] = val:lower()
-        end
+    local useSkip = false
+    if tokens[cursor] == "-skip" then
+        useSkip = true
         cursor = cursor + 1
+    end
+    local text = table.concat(tokens, " ", cursor)
+    if text == "" then return end
+    if not (UnitExists("target") and UnitIsPlayer("target")) then return end
+    local name = UnitName("target")
+    SendChatMessage(text, "WHISPER", nil, name)
+    if useSkip then loadSkip()[name] = true end
+end
+
+local function parseFlags(input)
+    local tokens = {}
+    for t in input:gmatch("%S+") do tokens[#tokens + 1] = t end
+    local cursor = 1
+    local opts = { terms = {}, useSkip = false }
+    while cursor <= #tokens do
+        local flag = tokens[cursor]
+        local value = tokens[cursor + 1]
+        if flag == "-limit" and value then
+            opts.limit = tonumber(value)
+            cursor = cursor + 2
+        elseif flag == "-cd" and value then
+            local minutes = tonumber(value)
+            if minutes and minutes > 0 then
+                opts.cooldownSeconds = math.floor(minutes * 60)
+            end
+            cursor = cursor + 2
+        elseif flag == "-skip" then
+            opts.useSkip = true
+            cursor = cursor + 1
+        elseif flag == "-not" and value then
+            for term in value:gmatch("[^,]+") do
+                local cleaned = trim(term):lower()
+                if cleaned ~= "" then
+                    opts.terms[#opts.terms + 1] = cleaned
+                end
+            end
+            cursor = cursor + 2
+        else
+            break
+        end
     end
     local words = {}
     for i = cursor, #tokens do words[#words + 1] = tokens[i] end
-    return limit, excludes, table.concat(words, " ")
+    opts.text = table.concat(words, " ")
+    return opts
 end
 
-local function isFiltered(info, excludes)
-    if not excludes or #excludes == 0 then return false end
+local function isFiltered(info, terms)
+    if #terms == 0 then return false end
     local class = (info.classStr or ""):lower()
     local area = (info.area or ""):lower()
-    local raw = (info.fullName or ""):lower()
-    local name = raw:match("^([^-]+)") or raw
-    for _, f in ipairs(excludes) do
-        if f == class then return true end
-        if area ~= "" and area:find(f, 1, true) then return true end
-        if name ~= "" and name:find(f, 1, true) then return true end
+    for _, term in ipairs(terms) do
+        if term == class then return true end
+        if area ~= "" and area:find(term, 1, true) then return true end
     end
     return false
 end
 
-local function dispatchWho(limit, excludes, text, opts)
+local function dispatchWho(opts)
     local count = C_FriendList.GetNumWhoResults()
     if count == 0 then
-        notify("No /who results.")
+        chatLine("No /who results — run /who first.")
         return
     end
-    limit = limit or count
+
     local groupSet = buildGroupSet()
     local skip = opts.useSkip and loadSkip() or nil
     local cooldownBucket
-    if opts.useCooldown then
+    local cooldownMinutes
+    if opts.cooldownSeconds then
         cooldownBucket = loadCooldowns()
-        pruneCooldowns(cooldownBucket)
+        pruneCooldowns(cooldownBucket, opts.cooldownSeconds)
+        cooldownMinutes = math.floor(opts.cooldownSeconds / 60)
     end
 
-    local sent = 0
+    local eligible = {}
+    local skipGroup, skipNot, skipList, skipCd = 0, 0, 0, 0
     for i = 1, count do
-        if sent >= limit then break end
         local info = C_FriendList.GetWhoInfo(i)
         local fullName = info and info.fullName
-        local short = nameOnly(fullName)
-        local skipThis = not fullName
-        if not skipThis and isFiltered(info, excludes) then skipThis = true end
-        if not skipThis and groupSet[short or fullName] then skipThis = true end
-        if not skipThis and skip and skip[fullName] then skipThis = true end
-        if not skipThis and cooldownBucket and not isCool(cooldownBucket, fullName) then skipThis = true end
-        if not skipThis then
-            SendChatMessage(text, "WHISPER", nil, fullName)
-            if skip then skip[fullName] = true end
-            if cooldownBucket then cooldownBucket[fullName] = time() end
-            sent = sent + 1
+        if fullName then
+            local short = nameOnly(fullName)
+            if groupSet[short or fullName] then
+                skipGroup = skipGroup + 1
+            elseif isFiltered(info, opts.terms) then
+                skipNot = skipNot + 1
+            elseif skip and skip[fullName] then
+                skipList = skipList + 1
+            elseif cooldownBucket and not isCool(cooldownBucket, fullName, opts.cooldownSeconds) then
+                skipCd = skipCd + 1
+            else
+                eligible[#eligible + 1] = fullName
+            end
         end
     end
-    if sent == 0 then
-        notify("No recipients after filtering.")
+
+    local eligibleCount = #eligible
+    local sendCount = opts.limit and math.min(opts.limit, eligibleCount) or eligibleCount
+    local skipLimit = eligibleCount - sendCount
+    local skippedTotal = skipGroup + skipNot + skipList + skipCd + skipLimit
+
+    if sendCount == 0 then
+        chatLine("0 of " .. count .. " /who " .. plural(count, "result", "results") .. " eligible to whisper.")
+        local parts = {}
+        if skipGroup > 0 then parts[#parts + 1] = "party/raid " .. skipGroup end
+        if skipNot > 0 then parts[#parts + 1] = "-not " .. skipNot end
+        if skipList > 0 then parts[#parts + 1] = "-skip " .. skipList end
+        if skipCd > 0 then parts[#parts + 1] = "-cd " .. skipCd end
+        if #parts > 0 then chatLine("Skipped: " .. table.concat(parts, ", ") .. ".") end
+        return
+    end
+
+    chatLine("Whispering " .. sendCount .. " of " .. count .. " /who " .. plural(count, "result", "results") .. ".")
+    if skipLimit > 0 then
+        chatLine("  -limit " .. opts.limit .. " — capping " .. skipLimit .. " eligible " .. plural(skipLimit, "recipient", "recipients") .. ".")
+    end
+    if #opts.terms > 0 then
+        chatLine("  -not " .. table.concat(opts.terms, ",") .. " — skipping " .. skipNot .. " matching class/zone.")
+    end
+    if skip then
+        chatLine("  -skip — skipping " .. skipList .. " already on the skip list; new recipients will be added.")
+    end
+    if cooldownBucket then
+        chatLine("  -cd " .. cooldownMinutes .. " — skipping " .. skipCd .. " still cooling; new recipients will cool for " .. cooldownMinutes .. " min.")
+    end
+
+    local addedSkip = 0
+    for i = 1, sendCount do
+        local fullName = eligible[i]
+        SendChatMessage(opts.text, "WHISPER", nil, fullName)
+        if skip and not skip[fullName] then
+            skip[fullName] = true
+            addedSkip = addedSkip + 1
+        end
+        if cooldownBucket then cooldownBucket[fullName] = time() end
+    end
+
+    if skippedTotal == 0 then
+        chatLine("Sent " .. sendCount .. " " .. plural(sendCount, "whisper", "whispers") .. ".")
     else
-        announce(sent)
+        local parts = {}
+        if skipGroup > 0 then parts[#parts + 1] = "party/raid " .. skipGroup end
+        if skipNot > 0 then parts[#parts + 1] = "-not " .. skipNot end
+        if skipList > 0 then parts[#parts + 1] = "-skip " .. skipList end
+        if skipCd > 0 then parts[#parts + 1] = "-cd " .. skipCd end
+        if skipLimit > 0 then parts[#parts + 1] = "-limit " .. skipLimit end
+        chatLine("Sent " .. sendCount .. ". Skipped " .. skippedTotal .. " (" .. table.concat(parts, ", ") .. ").")
+    end
+    if skip and addedSkip > 0 then
+        local total = 0
+        for _ in pairs(skip) do total = total + 1 end
+        chatLine("  +" .. addedSkip .. " added to skip list (now " .. total .. ").")
+    end
+    if cooldownBucket and sendCount > 0 then
+        chatLine("  +" .. sendCount .. " on cooldown for " .. cooldownMinutes .. " min.")
     end
 end
 
 local function whisperWho(input)
-    input = (input or ""):gsub("^%s+", ""):gsub("%s+$", "")
-    local limit, excludes, text = parseDashOptions(input)
-    if not text or text == "" then
-        notify("Usage: /ww [-N] [-FILTER...] MESSAGE")
-        return
-    end
-    dispatchWho(limit, excludes, text, { useSkip = false, useCooldown = true })
-end
-
-local function whisperWhoPlus(input)
-    input = (input or ""):gsub("^%s+", ""):gsub("%s+$", "")
-    local limit, excludes, text = parseDashOptions(input)
-    if not text or text == "" then
-        notify("Usage: /ww+ [-N] [-FILTER...] MESSAGE")
-        return
-    end
-    dispatchWho(limit, excludes, text, { useSkip = true, useCooldown = false })
+    local opts = parseFlags(trim(input))
+    if not opts.text or opts.text == "" then return end
+    dispatchWho(opts)
 end
 
 local function collectAuctionSellers()
@@ -228,103 +280,55 @@ local function collectAuctionSellers()
 end
 
 local function whisperSellers(text)
-    if not text or text == "" then
-        notify("Usage: /ws MESSAGE")
-        return
-    end
-    if not AuctionFrame or not AuctionFrame:IsShown() then
-        notify("Open the auction house Browse tab and run a search first.")
-        return
-    end
+    if not text or text == "" then return end
+    if not AuctionFrame or not AuctionFrame:IsShown() then return end
     local names = collectAuctionSellers()
-    if not names or #names == 0 then
-        notify("No auction results -- run a search on the Browse tab first.")
-        return
-    end
+    if not names or #names == 0 then return end
     for _, name in ipairs(names) do
         SendChatMessage(text, "WHISPER", nil, name)
     end
-    announce(#names)
 end
 
-local HELP_LINES = {
-    { "/wt MESSAGE",                       "Whisper your current target." },
-    { "/wt+ MESSAGE",                      "Whisper your current target and add them to the skip list." },
-    { "/ww [-N] [-FILTER...] MESSAGE",     "Whisper everyone in your /who results. 5-minute cooldown per name." },
-    { "/ww+ [-N] [-FILTER...] MESSAGE",    "Whisper /who results, skip anyone on the skip list, and add new recipients to it." },
-    { "/ws MESSAGE",                       "Whisper every seller in the auction house Browse tab." },
-    { "/rr [-N] MESSAGE",                  "Reply to the last whisperers." },
-    { "/rr reset",                         "Clear the session reply-tracking list." },
-    { "/port [N] ZONE",                    "Whisper mages and warlocks for a portal or summon (with confirmation)." },
-    { "/clickers [N] ZONE [MESSAGE]",      "Whisper players to help click a summon (with confirmation). Alias: /clicker" },
-    { "/wta",                              "Show this commands list." },
-    { "/wta clear",                        "Clear the skip list." },
+local COMMANDS_HELP = {
+    "|cffffd200/ww MESSAGE|r — Whisper everyone in your /who results.",
+    "|cffffd200/wt MESSAGE|r — Whisper your current target.",
+    "|cffffd200/ws MESSAGE|r — Whisper every seller in the auction house Browse tab.",
+    "|cffffd200/rr MESSAGE|r — Reply to recent whisperers. Use \"/rr reset\" to clear the tracker.",
+    "|cffffd200/wta|r — Print this help.",
+    "|cffffd200/wta clear skip|r — Empty the skip list.",
+    "|cffffd200/wta clear cd|r — Empty the cooldown history.",
+    "|cffffd200/wta clear all|r — Empty both.",
 }
 
-local function buildHelpText()
-    local out = {}
-    for i = 1, #HELP_LINES do
-        local cmd, desc = HELP_LINES[i][1], HELP_LINES[i][2]
-        out[#out + 1] = "|cffffd200" .. cmd .. "|r"
-        out[#out + 1] = "|cffd0d0d0" .. desc .. "|r"
-        if i < #HELP_LINES then out[#out + 1] = "" end
+local PARAMETERS_HELP = {
+    "|cffffd200-limit N|r — Cap the recipient count to N.",
+    "|cffffd200-not VALUE|r — Skip a class (Warrior, Mage, …) or a zone (substring match). Separate multiple values with commas.",
+    "|cffffd200-skip|r — Skip anyone on the skip list, and add successful recipients to it.",
+    "|cffffd200-cd M|r — Skip anyone whispered in the last M minutes, and remember new recipients for M minutes.",
+}
+
+local function printHelp()
+    chatLine("Commands")
+    for _, line in ipairs(COMMANDS_HELP) do
+        DEFAULT_CHAT_FRAME:AddMessage("  " .. line)
     end
-    return table.concat(out, "\n")
-end
-
-local helpFrame
-
-local function buildHelpFrame()
-    local width, padX, topPad, bottomPad = 460, 14, 36, 14
-
-    local f = CreateFrame("Frame", "WhisperThemAllHelpFrame", UIParent, "TooltipBorderedFrameTemplate")
-    f:SetPoint("CENTER")
-    f:SetFrameStrata("DIALOG")
-    f:SetToplevel(true)
-    f:SetMovable(true)
-    f:EnableMouse(true)
-    f:SetClampedToScreen(true)
-    f:RegisterForDrag("LeftButton")
-    f:SetScript("OnDragStart", f.StartMoving)
-    f:SetScript("OnDragStop", f.StopMovingOrSizing)
-
-    local title = f:CreateFontString(nil, "OVERLAY", "GameTooltipHeaderText")
-    title:SetPoint("TOPLEFT", padX, -12)
-    title:SetJustifyH("LEFT")
-    title:SetText("Whisper Them All!")
-
-    local close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-    close:SetPoint("TOPRIGHT", 2, 2)
-
-    local body = f:CreateFontString(nil, "OVERLAY", "GameTooltipText")
-    body:SetPoint("TOPLEFT", padX, -topPad)
-    body:SetWidth(width - padX * 2)
-    body:SetJustifyH("LEFT")
-    body:SetJustifyV("TOP")
-    body:SetSpacing(2)
-    body:SetText(buildHelpText())
-
-    f:SetSize(width, topPad + body:GetStringHeight() + bottomPad)
-
-    tinsert(UISpecialFrames, "WhisperThemAllHelpFrame")
-    f:Hide()
-    return f
-end
-
-local function showHelp()
-    if not helpFrame then helpFrame = buildHelpFrame() end
-    helpFrame:Show()
-    helpFrame:Raise()
+    chatLine("Parameters for /ww and /wt")
+    for _, line in ipairs(PARAMETERS_HELP) do
+        DEFAULT_CHAT_FRAME:AddMessage("  " .. line)
+    end
 end
 
 local function adminCommand(input)
-    input = (input or ""):gsub("^%s+", ""):gsub("%s+$", ""):lower()
+    input = trim(input):lower()
     if input == "" then
-        showHelp()
-    elseif input == "clear" then
+        printHelp()
+    elseif input == "clear skip" then
         clearSkip()
-    else
-        notify("Usage: /wta  or  /wta clear")
+    elseif input == "clear cd" then
+        clearCooldowns()
+    elseif input == "clear all" then
+        clearSkip()
+        clearCooldowns()
     end
 end
 
@@ -349,16 +353,10 @@ colorWatch:RegisterEvent("UPDATE_CHAT_COLOR")
 colorWatch:SetScript("OnEvent", blendWhisperColors)
 
 SLASH_WHISPERTARGET1 = "/wt"
-SlashCmdList["WHISPERTARGET"] = function(text) whisperTarget(text or "") end
-
-SLASH_WHISPERTARGETPLUS1 = "/wt+"
-SlashCmdList["WHISPERTARGETPLUS"] = function(text) whisperTargetPlus(text or "") end
+SlashCmdList["WHISPERTARGET"] = whisperTarget
 
 SLASH_WHISPERWHO1 = "/ww"
 SlashCmdList["WHISPERWHO"] = whisperWho
-
-SLASH_WHISPERWHOPLUS1 = "/ww+"
-SlashCmdList["WHISPERWHOPLUS"] = whisperWhoPlus
 
 SLASH_WHISPERSELLERS1 = "/ws"
 SlashCmdList["WHISPERSELLERS"] = whisperSellers
@@ -366,7 +364,3 @@ SlashCmdList["WHISPERSELLERS"] = whisperSellers
 SLASH_WHISPERTHEMALLADMIN1 = "/wta"
 SlashCmdList["WHISPERTHEMALLADMIN"] = adminCommand
 
-_G.WhisperThemAll = _G.WhisperThemAll or {}
-WhisperThemAll.BuildGroupSet = buildGroupSet
-WhisperThemAll.NameOnly = nameOnly
-WhisperThemAll.Announce = announce

@@ -1,13 +1,8 @@
-local PREFIX = "|cffffff00[Whisper Them All!]:|r "
 local MAX_RECENT = 80
 
 local recent = {}
 local seen = {}
 local replied = {}
-
-local function notify(msg)
-    print(PREFIX .. msg)
-end
 
 local function trackWhisper(name)
     if seen[name] then
@@ -68,19 +63,12 @@ local function replyRecent(input)
 
     if input:lower() == "reset" then
         wipe(replied)
-        notify("Reply list cleared.")
         return
     end
-    if #recent == 0 then
-        notify("No players have whispered you yet.")
-        return
-    end
+    if #recent == 0 then return end
 
     local limit, excludes, text = parseReplyInput(input)
-    if not text or text == "" then
-        notify("Usage: /rr MESSAGE or /rr -N MESSAGE")
-        return
-    end
+    if not text or text == "" then return end
     limit = limit or #recent
 
     local session = {}
@@ -95,9 +83,6 @@ local function replyRecent(input)
             replied[name] = true
             sent = sent + 1
         end
-    end
-    if sent > 0 and WhisperThemAll and WhisperThemAll.Announce then
-        WhisperThemAll.Announce(sent)
     end
 end
 

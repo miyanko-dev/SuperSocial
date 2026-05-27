@@ -1,86 +1,92 @@
 # WhisperThemAll
 
-Whisper and reply tools for WoW Classic 1.15.x.
+Mass-whisper and quick-reply tools for WoW Classic 1.15.x.
 
-Whispers are sent directly through the game's chat system — no internal queueing, throttling, or pacing. The server handles batching on its end. After every multi-target send the addon prints `Sending message to N players.` in chat.
+## What it does
 
-## Modules
+Run a `/who` search, then `/ww MESSAGE` whispers everyone in the results. That's the whole idea.
 
-| File | Purpose |
-|---|---|
-| `Whisper.lua` | `/wt`, `/wt+`, `/ww`, `/ww+`, `/ws`, `/wta` |
-| `Reply.lua` | `/rr` |
-| `Port.lua` | `/port`, `/clickers` and message templates |
+## Try it
 
-## Whisper
+1. Type `/who 25-30` in chat (or any filter you like).
+2. When the results appear, type `/ww WTB Wool Cloth 1g/stack`.
+3. Done — everyone in your `/who` results just got whispered.
 
-| Command | Description |
-|---|---|
-| `/wt MESSAGE` | Whisper your current target |
-| `/wt+ MESSAGE` | Whisper your current target and add them to the skip list |
-| `/ww [-N] [-FILTER...] MESSAGE` | Whisper everyone in your `/who` results, optionally capped at N, optionally excluding filters |
-| `/ww+ [-N] [-FILTER...] MESSAGE` | Whisper `/who` results, skip anyone already on the skip list, and add the new recipients to it |
-| `/ws MESSAGE` | Whisper every seller in the native auction house Browse tab |
-| `/wta clear` | Clear the skip list |
+You'll never whisper yourself or anyone in your party or raid.
 
-`/ww` always skips party/raid members and players you whispered with `/ww` in the last 5 minutes (per-character cooldown, persists across reloads). It does not consult the skip list.
+## Four optional extras for /ww
 
-`/ww+` skips party/raid members and any name on the skip list, and adds successful recipients to it. The 5-minute `/ww` cooldown does not apply.
+Use any, all, or none — they compose in any order.
 
-Every option is dash-prefixed — `-N` caps recipients; each `-text` excludes by class (exact), name (substring), or zone (substring), case-insensitive. The first non-dash token starts the message. Example: `/ww -10 -warlock LF tank for SM` whispers the first 10 non-warlocks in `/who` with "LF tank for SM".
-
-## Reply
-
-| Command | Description |
-|---|---|
-| `/rr [-N] MESSAGE` | Reply to the last whisperers (optionally only the last N) |
-| `/rr reset` | Clear the session reply-tracking list |
-
-## Travel
-
-| Command | Description |
-|---|---|
-| `/port [N] ZONE` | Whisper up to N mages and up to N warlocks in a capital city with a randomly chosen tip-ready template. ZONE must be a real mage portal destination |
-| `/clickers [N] ZONE [MESSAGE]` (alias: `/clicker`) | Whisper up to N non-warlock players in the zone to help click a summon |
-
-Both `/port` and `/clickers` show a native confirmation popup with the recipient count and a sample of the message before any whisper goes out. Click **Send** to fire them; click **Cancel** to abort. The skip list is not consulted and not modified.
-
-`ZONE` is written without a leading dash and can contain spaces (e.g. `Booty Bay`, `Thunder Bluff`). Known aliases:
-
-| Display zone | Aliases | Min mage level | `/port` | `/clickers` |
-|---|---|---|---|---|
-| Stormwind | `stormwind`, `sw` | 40 | ✓ | ✓ |
-| Ironforge | `ironforge`, `if` | 40 | ✓ | ✓ |
-| Orgrimmar | `orgrimmar`, `org` | 40 | ✓ | ✓ |
-| Undercity | `undercity`, `uc` | 40 | ✓ | ✓ |
-| Darnassus | `darnassus`, `dar` | 50 | ✓ | ✓ |
-| Thunder Bluff | `thunder bluff`, `thunderbluff`, `thunder`, `tb` | 50 | ✓ | ✓ |
-| Booty Bay | `booty bay`, `bootybay`, `bb` | — | — | ✓ |
-
-Default `N` is 5.
-
-### Display vs. search zones
-
-Each whisper template substitutes `{name}` (the recipient's first name) and `{zone}` (the **display** name of the destination). For subzones, hubs, or anywhere `/who` can't resolve directly, the addon looks up the player in the **parent** zone but still puts the original destination in the message. Example: `/port Booty Bay` sends `/who Stranglethorn` but whispers say "summon to Booty Bay". Extend the mapping in `Port.lua`'s `ZONES` table to add more hubs (e.g. Ratchet → The Barrens).
-
-### Mages vs. warlocks
-
-`/port` only accepts the six capital city portal destinations. Any other zone (including subzone fallbacks like Booty Bay or unrelated zones like Feralas) is rejected with a usage hint. Mages below the minimum level for the requested portal are skipped, so `/port Darnassus` never whispers a sub-50 mage and `/port Stormwind` never whispers a sub-40 mage. Warlock summons have no level filter.
-
-For warlock-only summon runs to non-capital hubs, use `/clickers`.
-
-### Custom messages on `/clickers`
-
-Omit `MESSAGE` to use one of the built-in clicker templates. Pass your own to override — `{name}` and `{zone}` substitutions still apply. Examples:
+### Limit the count
 
 ```
-/port Stormwind
-/port 3 Thunder Bluff
-/clickers Booty Bay
-/clickers 5 Stranglethorn
-/clickers Booty Bay help us click please
+/ww -limit 10 LFM SM live
 ```
+
+Whispers only the first 10 people from your `/who` results.
+
+### Skip a class or zone
+
+```
+/ww -not Warlock LFM tank for SM
+/ww -not Maraudon WTS Black Lotus 50g
+/ww -not Warlock,Maraudon LFM healer
+```
+
+`-not` skips anyone whose class matches (Warrior, Mage, Warlock, …) or whose zone contains the word (Maraudon, Stormwind, …). Separate multiple with commas — no spaces around them.
+
+### Don't whisper the same people twice
+
+```
+/ww -skip Selling enchant mats, whisper for list
+```
+
+`-skip` whispers everyone, then **remembers** each recipient. Run `/ww -skip` again and those people are skipped. The list survives reloads. Clear it with `/wta clear skip`.
+
+Use `-skip` when you're pitching the same thing over a long session and want to make sure nobody hears it twice.
+
+### Cool off recipients for a while
+
+```
+/ww -cd 30 WTB Black Lotus, paying 80g
+```
+
+`-cd 30` whispers everyone, then puts each recipient on a 30-minute cooldown. Run `/ww -cd 30` again within that window and the people you just whispered are skipped. Cooldowns age out on their own. Clear early with `/wta clear cd`.
+
+Use `-cd` when you'll repeat the same broadcast every few minutes.
+
+### Combine freely
+
+```
+/ww -limit 20 -not Warlock -cd 15 LFM SM live, need 1 tank
+```
+
+Up to 20 non-warlocks, on a 15-minute cooldown. Order doesn't matter.
+
+## Other commands
+
+| Command | What it does |
+|---|---|
+| `/wt MESSAGE` | Whisper your current target. |
+| `/wt -skip MESSAGE` | Whisper your target and add them to the skip list. |
+| `/ws MESSAGE` | Whisper every seller in the auction house Browse tab. |
+| `/rr [-N] MESSAGE` | Reply to recent whisperers. Optional `-N` caps to the last N. |
+| `/rr reset` | Clear the session reply tracker. |
+| `/wta` | Print the command and parameter reference to chat. |
+| `/wta clear skip` | Empty the skip list. |
+| `/wta clear cd` | Empty the cooldown history. |
+| `/wta clear all` | Empty both. |
+
+## Chat feedback
+
+Every `/ww` run prints two short summaries to your chat frame:
+
+- **Before sending** — how many of your `/who` results will be whispered, and what each active flag is doing on this run.
+- **After sending** — how many whispers went out, what was skipped and why, and any persistent state that changed (new entries added to the skip list, new cooldowns recorded).
+
+If no recipients are eligible (everyone got filtered out), you'll see a single line saying so along with the skip breakdown — useful for working out which flag is being too aggressive.
 
 ## Chat colour
 
-Incoming whispers are recoloured to a softer blend of the outgoing whisper colour so both sides of a conversation read consistently.
+Incoming whispers are recoloured to a softer blend of your outgoing whisper colour, so both sides of a conversation read consistently.
