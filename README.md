@@ -71,7 +71,7 @@ Up to 20 non-warlocks, on a 15-minute cooldown. Order doesn't matter.
 | `/wt MESSAGE` | Whisper your current target. |
 | `/wt -skip MESSAGE` | Whisper your target and add them to the skip list. |
 | `/ws MESSAGE` | Whisper every seller in the auction house Browse tab. |
-| `/rr [-N] MESSAGE` | Reply to recent whisperers. Optional `-N` caps to the last N. |
+| `/rr [-N] [-name…] MESSAGE` | Reply to recent whisperers. `-N` caps to the last N; any other `-word` skips names containing that substring (e.g. `-bob`). |
 | `/rr reset` | Clear the session reply tracker. |
 | `/wta` | Print the command and parameter reference to chat. |
 | `/wta clear skip` | Empty the skip list. |
