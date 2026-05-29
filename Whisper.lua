@@ -72,9 +72,9 @@ end
 
 local function buildGroupSet()
     local set = {}
-    if not IsInGroup() then return set end
     local me = UnitName("player")
     if me then set[me] = true end
+    if not IsInGroup() then return set end
     if IsInRaid() then
         for i = 1, GetNumGroupMembers() do
             local n = UnitName("raid" .. i)
