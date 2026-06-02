@@ -1,4 +1,10 @@
+local _, ns = ...
+
 local MAX_RECENT = 80
+
+local tint = ns.tint
+local status = ns.status
+local plural = ns.plural
 
 local recent = {}
 local seen = {}
@@ -61,29 +67,53 @@ end
 local function replyRecent(input)
     input = (input or ""):gsub("^%s+", ""):gsub("%s+$", "")
 
-    if input:lower() == "reset" then
+    local command = input:lower()
+    if command == "reset" or command == "clear" then
+        -- Drop the recent-whisperer history so only whispers received after
+        -- this point are eligible to reply to. Not persisted: a reload or
+        -- re-login resets it too, since the history is read live from chat.
+        wipe(recent)
+        wipe(seen)
         wipe(replied)
+        status("Reply tracking reset — only new whispers will be replied to.")
         return
     end
-    if #recent == 0 then return end
+    if #recent == 0 then
+        status(tint("skip", "No recent whisperers") .. " to reply to.")
+        return
+    end
 
     local limit, excludes, text = parseReplyInput(input)
     if not text or text == "" then return end
     limit = limit or #recent
 
-    local session = {}
-    local sent = 0
+    -- Walk newest-first so a limit keeps the most recent whisperers.
+    local eligible = {}
     for i = #recent, 1, -1 do
-        if sent >= limit then break end
         local name = recent[i]
-        if name and not session[name] and not replied[name]
-            and not matchesExcludes(name, excludes) then
-            SendChatMessage(text, "WHISPER", nil, name)
-            session[name] = true
-            replied[name] = true
-            sent = sent + 1
+        if name and not matchesExcludes(name, excludes) and not replied[name] then
+            eligible[#eligible + 1] = name
         end
     end
+
+    local sendCount = math.min(limit, #eligible)
+    if sendCount == 0 then
+        status(tint("skip", "Nobody to reply to") .. " — 0 of " .. #recent .. " recent eligible.")
+        return
+    end
+
+    for i = 1, sendCount do
+        local fullName = eligible[i]
+        ns.queueWhisper(text, fullName)
+        replied[fullName] = true
+    end
+
+    local line = tint("sent", "Replying to " .. sendCount) .. " of " .. #recent .. " recent " .. plural(#recent, "whisperer", "whisperers")
+    local skipped = #recent - sendCount
+    if skipped > 0 then
+        line = line .. ", " .. tint("skip", skipped .. " skipped")
+    end
+    status(line .. ".")
 end
 
 local listener = CreateFrame("Frame")

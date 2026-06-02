@@ -1,18 +1,14 @@
+local _, ns = ...
+
 local applyingColor = false
 
-local CHAT_PREFIX = "|cff66ccffWhisperThemAll:|r "
-
-local function chatLine(text)
-    DEFAULT_CHAT_FRAME:AddMessage(CHAT_PREFIX .. text)
-end
+local tint = ns.tint
+local status, detail = ns.status, ns.detail
+local plural = ns.plural
+local className = ns.className
 
 local function trim(s)
     return (s or ""):gsub("^%s+", ""):gsub("%s+$", "")
-end
-
-local function plural(n, singular, multiple)
-    if n == 1 then return singular end
-    return multiple
 end
 
 local function playerKey()
@@ -58,6 +54,8 @@ end
 local function isCool(bucket, name, cooldownSeconds)
     local ts = bucket[name]
     if not ts then return true end
+    -- Bare -cd has no duration: any entry on the list counts as still cooling.
+    if not cooldownSeconds then return false end
     return (time() - ts) >= cooldownSeconds
 end
 
@@ -101,10 +99,15 @@ local function whisperTarget(input)
     end
     local text = table.concat(tokens, " ", cursor)
     if text == "" then return end
-    if not (UnitExists("target") and UnitIsPlayer("target")) then return end
-    local name = UnitName("target")
-    SendChatMessage(text, "WHISPER", nil, name)
-    if useSkip then loadSkip()[name] = true end
+    if not (UnitExists("target") and UnitIsPlayer("target")) then
+        status(tint("skip", "No player targeted") .. " — target someone first.")
+        return
+    end
+    local targetName = UnitName("target")
+    local _, classFile = UnitClass("target")
+    SendChatMessage(text, "WHISPER", nil, targetName)
+    status(tint("sent", "Whispered") .. " " .. className(targetName, classFile) .. ".")
+    if useSkip then loadSkip()[targetName] = true end
 end
 
 local function parseFlags(input)
@@ -115,26 +118,38 @@ local function parseFlags(input)
     while cursor <= #tokens do
         local flag = tokens[cursor]
         local value = tokens[cursor + 1]
-        if flag == "-limit" and value then
-            opts.limit = tonumber(value)
-            cursor = cursor + 2
-        elseif flag == "-cd" and value then
-            local minutes = tonumber(value)
+        if flag:match("^%-%d+$") then
+            opts.limit = tonumber(flag:sub(2))
+            cursor = cursor + 1
+        elseif flag == "-cd" then
+            opts.useCooldown = true
+            local minutes = value and tonumber(value)
             if minutes and minutes > 0 then
                 opts.cooldownSeconds = math.floor(minutes * 60)
+                cursor = cursor + 2
+            else
+                cursor = cursor + 1
             end
-            cursor = cursor + 2
         elseif flag == "-skip" then
             opts.useSkip = true
             cursor = cursor + 1
         elseif flag == "-not" and value then
-            for term in value:gmatch("[^,]+") do
+            local raw = value
+            cursor = cursor + 2
+            -- Keep absorbing tokens while the comma list is still open, so
+            -- "-not Maraudon, Warlock" works with spaces around the commas.
+            while cursor <= #tokens do
+                local listContinues = raw:match(",%s*$") or tokens[cursor]:match("^,")
+                if not listContinues then break end
+                raw = raw .. " " .. tokens[cursor]
+                cursor = cursor + 1
+            end
+            for term in raw:gmatch("[^,]+") do
                 local cleaned = trim(term):lower()
                 if cleaned ~= "" then
                     opts.terms[#opts.terms + 1] = cleaned
                 end
             end
-            cursor = cursor + 2
         else
             break
         end
@@ -159,7 +174,7 @@ end
 local function dispatchWho(opts)
     local count = C_FriendList.GetNumWhoResults()
     if count == 0 then
-        chatLine("No /who results — run /who first.")
+        status(tint("skip", "No /who results") .. " — run /who first.")
         return
     end
 
@@ -167,28 +182,25 @@ local function dispatchWho(opts)
     local skip = opts.useSkip and loadSkip() or nil
     local cooldownBucket
     local cooldownMinutes
-    if opts.cooldownSeconds then
+    if opts.useCooldown then
         cooldownBucket = loadCooldowns()
-        pruneCooldowns(cooldownBucket, opts.cooldownSeconds)
-        cooldownMinutes = math.floor(opts.cooldownSeconds / 60)
+        if opts.cooldownSeconds then
+            pruneCooldowns(cooldownBucket, opts.cooldownSeconds)
+            cooldownMinutes = math.floor(opts.cooldownSeconds / 60)
+        end
     end
 
     local eligible = {}
-    local skipGroup, skipNot, skipList, skipCd = 0, 0, 0, 0
     for i = 1, count do
         local info = C_FriendList.GetWhoInfo(i)
         local fullName = info and info.fullName
         if fullName then
             local short = nameOnly(fullName)
-            if groupSet[short or fullName] then
-                skipGroup = skipGroup + 1
-            elseif isFiltered(info, opts.terms) then
-                skipNot = skipNot + 1
-            elseif skip and skip[fullName] then
-                skipList = skipList + 1
-            elseif cooldownBucket and not isCool(cooldownBucket, fullName, opts.cooldownSeconds) then
-                skipCd = skipCd + 1
-            else
+            local excluded = groupSet[short or fullName]
+                or isFiltered(info, opts.terms)
+                or (skip and skip[fullName])
+                or (cooldownBucket and not isCool(cooldownBucket, fullName, opts.cooldownSeconds))
+            if not excluded then
                 eligible[#eligible + 1] = fullName
             end
         end
@@ -196,64 +208,28 @@ local function dispatchWho(opts)
 
     local eligibleCount = #eligible
     local sendCount = opts.limit and math.min(opts.limit, eligibleCount) or eligibleCount
-    local skipLimit = eligibleCount - sendCount
-    local skippedTotal = skipGroup + skipNot + skipList + skipCd + skipLimit
 
     if sendCount == 0 then
-        chatLine("0 of " .. count .. " /who " .. plural(count, "result", "results") .. " eligible to whisper.")
-        local parts = {}
-        if skipGroup > 0 then parts[#parts + 1] = "party/raid " .. skipGroup end
-        if skipNot > 0 then parts[#parts + 1] = "-not " .. skipNot end
-        if skipList > 0 then parts[#parts + 1] = "-skip " .. skipList end
-        if skipCd > 0 then parts[#parts + 1] = "-cd " .. skipCd end
-        if #parts > 0 then chatLine("Skipped: " .. table.concat(parts, ", ") .. ".") end
+        status(tint("skip", "Nobody to whisper") .. " — 0 of " .. count .. " /who " .. plural(count, "result", "results") .. " eligible.")
         return
     end
 
-    chatLine("Whispering " .. sendCount .. " of " .. count .. " /who " .. plural(count, "result", "results") .. ".")
-    if skipLimit > 0 then
-        chatLine("  -limit " .. opts.limit .. " — capping " .. skipLimit .. " eligible " .. plural(skipLimit, "recipient", "recipients") .. ".")
-    end
-    if #opts.terms > 0 then
-        chatLine("  -not " .. table.concat(opts.terms, ",") .. " — skipping " .. skipNot .. " matching class/zone.")
-    end
-    if skip then
-        chatLine("  -skip — skipping " .. skipList .. " already on the skip list; new recipients will be added.")
-    end
-    if cooldownBucket then
-        chatLine("  -cd " .. cooldownMinutes .. " — skipping " .. skipCd .. " still cooling; new recipients will cool for " .. cooldownMinutes .. " min.")
-    end
-
-    local addedSkip = 0
+    -- Record skip-list / cooldown membership up front, then queue the sends so
+    -- they trickle out under the chat throttle.
     for i = 1, sendCount do
         local fullName = eligible[i]
-        SendChatMessage(opts.text, "WHISPER", nil, fullName)
-        if skip and not skip[fullName] then
-            skip[fullName] = true
-            addedSkip = addedSkip + 1
-        end
-        if cooldownBucket then cooldownBucket[fullName] = time() end
+        ns.queueWhisper(opts.text, fullName)
+        if skip then skip[fullName] = true end
+        -- Only a timed -cd records new recipients; bare -cd just reads the list.
+        if cooldownBucket and cooldownMinutes then cooldownBucket[fullName] = time() end
     end
 
-    if skippedTotal == 0 then
-        chatLine("Sent " .. sendCount .. " " .. plural(sendCount, "whisper", "whispers") .. ".")
-    else
-        local parts = {}
-        if skipGroup > 0 then parts[#parts + 1] = "party/raid " .. skipGroup end
-        if skipNot > 0 then parts[#parts + 1] = "-not " .. skipNot end
-        if skipList > 0 then parts[#parts + 1] = "-skip " .. skipList end
-        if skipCd > 0 then parts[#parts + 1] = "-cd " .. skipCd end
-        if skipLimit > 0 then parts[#parts + 1] = "-limit " .. skipLimit end
-        chatLine("Sent " .. sendCount .. ". Skipped " .. skippedTotal .. " (" .. table.concat(parts, ", ") .. ").")
+    local line = tint("sent", "Whispering " .. sendCount) .. " of " .. count .. " /who " .. plural(count, "result", "results")
+    local skipped = count - sendCount
+    if skipped > 0 then
+        line = line .. ", " .. tint("skip", skipped .. " skipped")
     end
-    if skip and addedSkip > 0 then
-        local total = 0
-        for _ in pairs(skip) do total = total + 1 end
-        chatLine("  +" .. addedSkip .. " added to skip list (now " .. total .. ").")
-    end
-    if cooldownBucket and sendCount > 0 then
-        chatLine("  +" .. sendCount .. " on cooldown for " .. cooldownMinutes .. " min.")
-    end
+    status(line .. ".")
 end
 
 local function whisperWho(input)
@@ -281,40 +257,49 @@ end
 
 local function whisperSellers(text)
     if not text or text == "" then return end
-    if not AuctionFrame or not AuctionFrame:IsShown() then return end
-    local names = collectAuctionSellers()
-    if not names or #names == 0 then return end
-    for _, name in ipairs(names) do
-        SendChatMessage(text, "WHISPER", nil, name)
+    if not AuctionFrame or not AuctionFrame:IsShown() then
+        status(tint("skip", "Auction house closed") .. " — open the Browse tab first.")
+        return
     end
+    local names = collectAuctionSellers()
+    if not names or #names == 0 then
+        status(tint("skip", "No sellers") .. " in the current Browse results.")
+        return
+    end
+    for _, sellerName in ipairs(names) do
+        ns.queueWhisper(text, sellerName)
+    end
+    status(tint("sent", "Whispering " .. #names) .. " auction " .. plural(#names, "seller", "sellers") .. ".")
 end
 
 local COMMANDS_HELP = {
     "|cffffd200/ww MESSAGE|r — Whisper everyone in your /who results.",
     "|cffffd200/wt MESSAGE|r — Whisper your current target.",
     "|cffffd200/ws MESSAGE|r — Whisper every seller in the auction house Browse tab.",
-    "|cffffd200/rr MESSAGE|r — Reply to recent whisperers. Use \"/rr reset\" to clear the tracker.",
+    "|cffffd200/rr MESSAGE|r — Reply to recent whisperers. \"/rr reset\" (or clear) ignores earlier whispers; only new ones get replies.",
     "|cffffd200/wta|r — Print this help.",
-    "|cffffd200/wta clear skip|r — Empty the skip list.",
+    "|cffffd200/wta reset|r — Empty the skip list (\"/wta clear\" too).",
     "|cffffd200/wta clear cd|r — Empty the cooldown history.",
     "|cffffd200/wta clear all|r — Empty both.",
 }
 
 local PARAMETERS_HELP = {
-    "|cffffd200-limit N|r — Cap the recipient count to N.",
-    "|cffffd200-not VALUE|r — Skip a class (Warrior, Mage, …) or a zone (substring match). Separate multiple values with commas.",
-    "|cffffd200-skip|r — Skip anyone on the skip list, and add successful recipients to it.",
-    "|cffffd200-cd M|r — Skip anyone whispered in the last M minutes, and remember new recipients for M minutes.",
+    "|cffffd200-N|r — (/ww, /rr) Whisper only the first N recipients, e.g. -10.",
+    "|cffffd200-not VALUE|r — (/ww) Skip a class (Warrior, Mage, …) or a zone (substring match). Separate multiple values with commas; spaces around the commas are fine.",
+    "|cffffd200-skip|r — (/ww, /wt) Skip anyone on the skip list, and add successful recipients to it.",
+    "|cffffd200-cd M|r — (/ww) Skip anyone whispered in the last M minutes, and remember new recipients for M minutes.",
+    "|cffffd200-cd|r — (/ww) With no M, skip anyone already on the cooldown list without adding new recipients to it.",
+    "|cffffd200-word|r — (/rr) Skip recent whisperers whose name contains word, e.g. -bob.",
 }
 
 local function printHelp()
-    chatLine("Commands")
+    status("Commands")
     for _, line in ipairs(COMMANDS_HELP) do
-        DEFAULT_CHAT_FRAME:AddMessage("  " .. line)
+        detail(line)
     end
-    chatLine("Parameters for /ww and /wt")
+    status("Parameters")
     for _, line in ipairs(PARAMETERS_HELP) do
-        DEFAULT_CHAT_FRAME:AddMessage("  " .. line)
+        detail(line)
     end
 end
 
@@ -322,13 +307,16 @@ local function adminCommand(input)
     input = trim(input):lower()
     if input == "" then
         printHelp()
-    elseif input == "clear skip" then
+    elseif input == "reset" or input == "clear" then
         clearSkip()
+        status(tint("skip", "Skip list cleared") .. ".")
     elseif input == "clear cd" then
         clearCooldowns()
+        status(tint("cool", "Cooldown history cleared") .. ".")
     elseif input == "clear all" then
         clearSkip()
         clearCooldowns()
+        status("Skip list and cooldown history cleared.")
     end
 end
 

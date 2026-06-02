@@ -6,5 +6,7 @@
 ## IconTexture: 134149
 ## SavedVariables: WhisperThemAllDB
 
+Format.lua
+Queue.lua
 Whisper.lua
 Reply.lua

@@ -21,10 +21,10 @@ Use any, all, or none — they compose in any order.
 ### Limit the count
 
 ```
-/ww -limit 10 LFM SM live
+/ww -10 LFM SM live
 ```
 
-Whispers only the first 10 people from your `/who` results.
+Whispers only the first 10 people from your `/who` results. The same `-N` works on `/rr`.
 
 ### Skip a class or zone
 
@@ -32,9 +32,10 @@ Whispers only the first 10 people from your `/who` results.
 /ww -not Warlock LFM tank for SM
 /ww -not Maraudon WTS Black Lotus 50g
 /ww -not Warlock,Maraudon LFM healer
+/ww -not Maraudon, Warlock LFM healer
 ```
 
-`-not` skips anyone whose class matches (Warrior, Mage, Warlock, …) or whose zone contains the word (Maraudon, Stormwind, …). Separate multiple with commas — no spaces around them.
+`-not` skips anyone whose class matches (Warrior, Mage, Warlock, …) or whose zone contains the word (Maraudon, Stormwind, …). Separate multiple with commas — spaces around the commas are fine (`Warlock,Maraudon` and `Warlock, Maraudon` both work). Note that a trailing comma means "another term follows", so the next word is read as a filter rather than part of your message.
 
 ### Don't whisper the same people twice
 
@@ -54,12 +55,22 @@ Use `-skip` when you're pitching the same thing over a long session and want to 
 
 `-cd 30` whispers everyone, then puts each recipient on a 30-minute cooldown. Run `/ww -cd 30` again within that window and the people you just whispered are skipped. Cooldowns age out on their own. Clear early with `/wta clear cd`.
 
-Use `-cd` when you'll repeat the same broadcast every few minutes.
+Use `-cd 30` when you'll repeat the same broadcast every few minutes.
+
+**Bare `-cd` (no minutes)** behaves differently:
+
+```
+/ww -cd LFM SM live, need 1 tank
+```
+
+It skips anyone **already** on the cooldown list but does **not** add the people it whispers. Use it to honour an existing cooldown for a one-off message without resetting everyone's timer — for example, a quick follow-up between your timed `-cd 30` broadcasts.
+
+Leaving `-cd` off entirely ignores the cooldown list completely: everyone in your `/who` results gets whispered and nobody is recorded.
 
 ### Combine freely
 
 ```
-/ww -limit 20 -not Warlock -cd 15 LFM SM live, need 1 tank
+/ww -20 -not Warlock -cd 15 LFM SM live, need 1 tank
 ```
 
 Up to 20 non-warlocks, on a 15-minute cooldown. Order doesn't matter.
@@ -72,18 +83,19 @@ Up to 20 non-warlocks, on a 15-minute cooldown. Order doesn't matter.
 | `/wt -skip MESSAGE` | Whisper your target and add them to the skip list. |
 | `/ws MESSAGE` | Whisper every seller in the auction house Browse tab. |
 | `/rr [-N] [-name…] MESSAGE` | Reply to recent whisperers. `-N` caps to the last N; any other `-word` skips names containing that substring (e.g. `-bob`). |
-| `/rr reset` | Clear the session reply tracker. |
+| `/rr reset` or `/rr clear` | Reset the reply tracking point — only whispers received afterwards are replied to. Tracking isn't saved, so a `/reload` or re-login resets it too. |
 | `/wta` | Print the command and parameter reference to chat. |
-| `/wta clear skip` | Empty the skip list. |
+| `/wta reset` or `/wta clear` | Empty the skip list. |
 | `/wta clear cd` | Empty the cooldown history. |
 | `/wta clear all` | Empty both. |
 
+## Throttling
+
+Whispers are sent one every 0.5 seconds rather than all at once, so a big `/ww`, `/ws`, or `/rr` run stays under Blizzard's chat throttle instead of silently dropping messages or disconnecting you. The chat summary prints immediately; the whispers themselves trickle out over the following seconds.
+
 ## Chat feedback
 
-Every `/ww` run prints two short summaries to your chat frame:
-
-- **Before sending** — how many of your `/who` results will be whispered, and what each active flag is doing on this run.
-- **After sending** — how many whispers went out, what was skipped and why, and any persistent state that changed (new entries added to the skip list, new cooldowns recorded).
+Every `/ww` run prints a short summary to your chat frame: how many of your `/who` results are being whispered, the recipients (class-coloured), what each active flag skipped and why, and any persistent state that changed (new entries added to the skip list, new cooldowns recorded).
 
 If no recipients are eligible (everyone got filtered out), you'll see a single line saying so along with the skip breakdown — useful for working out which flag is being too aggressive.
 
