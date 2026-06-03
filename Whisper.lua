@@ -133,6 +133,9 @@ local function parseFlags(input)
         elseif flag == "-skip" then
             opts.useSkip = true
             cursor = cursor + 1
+        elseif flag == "-p" then
+            opts.preview = true
+            cursor = cursor + 1
         elseif flag == "-not" and value then
             local raw = value
             cursor = cursor + 2
@@ -214,6 +217,18 @@ local function dispatchWho(opts)
         return
     end
 
+    local skipped = count - sendCount
+
+    if opts.preview then
+        local line = tint("muted", "Preview") .. " — would whisper " .. sendCount .. " of " .. count .. " /who " .. plural(count, "result", "results")
+        if skipped > 0 then
+            line = line .. ", " .. tint("skip", skipped .. " skipped")
+        end
+        status(line .. ".")
+        detail(tint("muted", "Message:") .. " " .. opts.text)
+        return
+    end
+
     -- Record skip-list / cooldown membership up front, then queue the sends so
     -- they trickle out under the chat throttle.
     for i = 1, sendCount do
@@ -225,7 +240,6 @@ local function dispatchWho(opts)
     end
 
     local line = tint("sent", "Whispering " .. sendCount) .. " of " .. count .. " /who " .. plural(count, "result", "results")
-    local skipped = count - sendCount
     if skipped > 0 then
         line = line .. ", " .. tint("skip", skipped .. " skipped")
     end
@@ -255,8 +269,15 @@ local function collectAuctionSellers()
     return order
 end
 
-local function whisperSellers(text)
-    if not text or text == "" then return end
+local function whisperSellers(input)
+    input = trim(input)
+    local preview = false
+    if input == "-p" or input:match("^%-p%s") then
+        preview = true
+        input = trim(input:gsub("^%-p", "", 1))
+    end
+    local text = input
+    if text == "" then return end
     if not AuctionFrame or not AuctionFrame:IsShown() then
         status(tint("skip", "Auction house closed") .. " — open the Browse tab first.")
         return
@@ -264,6 +285,11 @@ local function whisperSellers(text)
     local names = collectAuctionSellers()
     if not names or #names == 0 then
         status(tint("skip", "No sellers") .. " in the current Browse results.")
+        return
+    end
+    if preview then
+        status(tint("muted", "Preview") .. " — would whisper " .. #names .. " auction " .. plural(#names, "seller", "sellers") .. ".")
+        detail(tint("muted", "Message:") .. " " .. text)
         return
     end
     for _, sellerName in ipairs(names) do
@@ -276,8 +302,9 @@ local COMMANDS_HELP = {
     "|cffffd200/ww MESSAGE|r — Whisper everyone in your /who results.",
     "|cffffd200/wt MESSAGE|r — Whisper your current target.",
     "|cffffd200/ws MESSAGE|r — Whisper every seller in the auction house Browse tab.",
-    "|cffffd200/rr MESSAGE|r — Reply to recent whisperers. \"/rr reset\" (or clear) ignores earlier whispers; only new ones get replies.",
+    "|cffffd200/rr MESSAGE|r — Reply to everyone who whispered you in the last 15 min (skipping anyone you replied to in the last 30 min). \"/rr reset\" (or clear) ignores earlier whispers.",
     "|cffffd200/wta|r — Print this help.",
+    "|cffffd200/wta stop|r — Cancel any whispers still queued to send.",
     "|cffffd200/wta reset|r — Empty the skip list (\"/wta clear\" too).",
     "|cffffd200/wta clear cd|r — Empty the cooldown history.",
     "|cffffd200/wta clear all|r — Empty both.",
@@ -289,6 +316,7 @@ local PARAMETERS_HELP = {
     "|cffffd200-skip|r — (/ww, /wt) Skip anyone on the skip list, and add successful recipients to it.",
     "|cffffd200-cd M|r — (/ww) Skip anyone whispered in the last M minutes, and remember new recipients for M minutes.",
     "|cffffd200-cd|r — (/ww) With no M, skip anyone already on the cooldown list without adding new recipients to it.",
+    "|cffffd200-p|r — (/ww, /ws, /rr) Preview only: show how many you'd whisper and the message, send nothing.",
     "|cffffd200-word|r — (/rr) Skip recent whisperers whose name contains word, e.g. -bob.",
 }
 
@@ -307,6 +335,13 @@ local function adminCommand(input)
     input = trim(input):lower()
     if input == "" then
         printHelp()
+    elseif input == "stop" then
+        local sent, dropped = ns.cancelQueue()
+        if sent == 0 and dropped == 0 then
+            status(tint("skip", "Nothing to stop") .. " — no whispers queued.")
+        else
+            status(tint("skip", "Stopped") .. " — " .. sent .. " sent, " .. dropped .. " " .. plural(dropped, "whisper", "whispers") .. " cancelled.")
+        end
     elseif input == "reset" or input == "clear" then
         clearSkip()
         status(tint("skip", "Skip list cleared") .. ".")

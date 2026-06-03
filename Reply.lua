@@ -1,30 +1,19 @@
 local _, ns = ...
 
-local MAX_RECENT = 80
+local WHISPER_WINDOW = 15 * 60   -- reply only to whispers from the last 15 minutes
+local REPLY_COOLDOWN = 30 * 60   -- don't re-reply to the same person within 30 minutes
 
 local tint = ns.tint
 local status = ns.status
+local detail = ns.detail
 local plural = ns.plural
 
-local recent = {}
-local seen = {}
-local replied = {}
+-- name -> timestamp of their most recent whisper / our most recent /rr reply.
+local whisperedAt = {}
+local repliedAt = {}
 
 local function trackWhisper(name)
-    if seen[name] then
-        for i = 1, #recent do
-            if recent[i] == name then
-                table.remove(recent, i)
-                break
-            end
-        end
-    else
-        seen[name] = true
-    end
-    recent[#recent + 1] = name
-    while #recent > MAX_RECENT do
-        seen[table.remove(recent, 1)] = nil
-    end
+    whisperedAt[name] = time()
 end
 
 local function parseReplyInput(input)
@@ -36,10 +25,13 @@ local function parseReplyInput(input)
     local cursor = 1
     local limit
     local excludes = {}
+    local preview = false
 
     while tokens[cursor] and tokens[cursor]:sub(1, 1) == "-" and #tokens[cursor] > 1 do
         local val = tokens[cursor]:sub(2)
-        if val:match("^%d+$") then
+        if val == "p" then
+            preview = true
+        elseif val:match("^%d+$") then
             limit = tonumber(val)
         else
             excludes[#excludes + 1] = val:lower()
@@ -51,7 +43,7 @@ local function parseReplyInput(input)
     for i = cursor, #tokens do
         words[#words + 1] = tokens[i]
     end
-    return limit, excludes, table.concat(words, " ")
+    return limit, excludes, table.concat(words, " "), preview
 end
 
 local function matchesExcludes(name, excludes)
@@ -69,47 +61,71 @@ local function replyRecent(input)
 
     local command = input:lower()
     if command == "reset" or command == "clear" then
-        -- Drop the recent-whisperer history so only whispers received after
-        -- this point are eligible to reply to. Not persisted: a reload or
-        -- re-login resets it too, since the history is read live from chat.
-        wipe(recent)
-        wipe(seen)
-        wipe(replied)
+        -- Drop the whisper history so only whispers received after this point
+        -- are eligible to reply to. Not persisted: a reload or re-login resets
+        -- it too, since the history is read live from chat.
+        wipe(whisperedAt)
+        wipe(repliedAt)
         status("Reply tracking reset — only new whispers will be replied to.")
         return
     end
-    if #recent == 0 then
+
+    local now = time()
+
+    -- Age out whispers past the 15-minute window and replies past the
+    -- 30-minute cooldown, so the tables stay bounded over a long session.
+    for name, ts in pairs(whisperedAt) do
+        if ts < now - WHISPER_WINDOW then whisperedAt[name] = nil end
+    end
+    for name, ts in pairs(repliedAt) do
+        if ts < now - REPLY_COOLDOWN then repliedAt[name] = nil end
+    end
+
+    local recentCount = 0
+    for _ in pairs(whisperedAt) do recentCount = recentCount + 1 end
+    if recentCount == 0 then
         status(tint("skip", "No recent whisperers") .. " to reply to.")
         return
     end
 
-    local limit, excludes, text = parseReplyInput(input)
+    local limit, excludes, text, preview = parseReplyInput(input)
     if not text or text == "" then return end
-    limit = limit or #recent
 
-    -- Walk newest-first so a limit keeps the most recent whisperers.
+    -- Eligible = whispered within the window, not excluded, not still on reply
+    -- cooldown. Sorted newest-first so a -N limit keeps the most recent.
     local eligible = {}
-    for i = #recent, 1, -1 do
-        local name = recent[i]
-        if name and not matchesExcludes(name, excludes) and not replied[name] then
+    for name in pairs(whisperedAt) do
+        if not matchesExcludes(name, excludes) and not repliedAt[name] then
             eligible[#eligible + 1] = name
         end
     end
+    table.sort(eligible, function(a, b) return whisperedAt[a] > whisperedAt[b] end)
 
-    local sendCount = math.min(limit, #eligible)
+    local sendCount = limit and math.min(limit, #eligible) or #eligible
     if sendCount == 0 then
-        status(tint("skip", "Nobody to reply to") .. " — 0 of " .. #recent .. " recent eligible.")
+        status(tint("skip", "Nobody to reply to") .. " — 0 of " .. recentCount .. " recent eligible.")
+        return
+    end
+
+    local skipped = recentCount - sendCount
+
+    if preview then
+        local line = tint("muted", "Preview") .. " — would reply to " .. sendCount .. " of " .. recentCount .. " recent " .. plural(recentCount, "whisperer", "whisperers")
+        if skipped > 0 then
+            line = line .. ", " .. tint("skip", skipped .. " skipped")
+        end
+        status(line .. ".")
+        detail(tint("muted", "Message:") .. " " .. text)
         return
     end
 
     for i = 1, sendCount do
         local fullName = eligible[i]
-        ns.queueWhisper(text, fullName)
-        replied[fullName] = true
+        ns.queueWhisper(text, fullName, "reply", "replies")
+        repliedAt[fullName] = now
     end
 
-    local line = tint("sent", "Replying to " .. sendCount) .. " of " .. #recent .. " recent " .. plural(#recent, "whisperer", "whisperers")
-    local skipped = #recent - sendCount
+    local line = tint("sent", "Replying to " .. sendCount) .. " of " .. recentCount .. " recent " .. plural(recentCount, "whisperer", "whisperers")
     if skipped > 0 then
         line = line .. ", " .. tint("skip", skipped .. " skipped")
     end

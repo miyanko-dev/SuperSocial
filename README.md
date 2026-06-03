@@ -14,9 +14,17 @@ Run a `/who` search, then `/ww MESSAGE` whispers everyone in the results. That's
 
 You'll never whisper yourself or anyone in your party or raid.
 
-## Four optional extras for /ww
+## Five optional extras for /ww
 
 Use any, all, or none — they compose in any order.
+
+### Preview before sending
+
+```
+/ww -p -not Warlock LFM SM live
+```
+
+`-p` is a dry run: it prints how many people you'd whisper (with the same skip breakdown) and echoes your message, but **sends nothing and changes nothing**. Drop the `-p` to send for real. Works on `/ws` and `/rr` too — handy before blasting a big `/who` or auction list.
 
 ### Limit the count
 
@@ -82,16 +90,17 @@ Up to 20 non-warlocks, on a 15-minute cooldown. Order doesn't matter.
 | `/wt MESSAGE` | Whisper your current target. |
 | `/wt -skip MESSAGE` | Whisper your target and add them to the skip list. |
 | `/ws MESSAGE` | Whisper every seller in the auction house Browse tab. |
-| `/rr [-N] [-name…] MESSAGE` | Reply to recent whisperers. `-N` caps to the last N; any other `-word` skips names containing that substring (e.g. `-bob`). |
+| `/rr [-N] [-name…] MESSAGE` | Reply to everyone who whispered you in the last 15 minutes, skipping anyone you already replied to within the last 30 minutes. `-N` caps to the last N most recent; any other `-word` skips names containing that substring (e.g. `-bob`). |
 | `/rr reset` or `/rr clear` | Reset the reply tracking point — only whispers received afterwards are replied to. Tracking isn't saved, so a `/reload` or re-login resets it too. |
 | `/wta` | Print the command and parameter reference to chat. |
+| `/wta stop` | Cancel any whispers still queued to send (reports how many went out and how many were cancelled). |
 | `/wta reset` or `/wta clear` | Empty the skip list. |
 | `/wta clear cd` | Empty the cooldown history. |
 | `/wta clear all` | Empty both. |
 
 ## Throttling
 
-Whispers are sent one every 0.5 seconds rather than all at once, so a big `/ww`, `/ws`, or `/rr` run stays under Blizzard's chat throttle instead of silently dropping messages or disconnecting you. The chat summary prints immediately; the whispers themselves trickle out over the following seconds.
+Whispers are sent one every 0.5 seconds rather than all at once, so a big `/ww`, `/ws`, or `/rr` run stays under Blizzard's chat throttle instead of silently dropping messages or disconnecting you. The chat summary prints immediately; the whispers themselves trickle out over the following seconds. Spotted a mistake mid-run? `/wta stop` cancels whatever's still queued.
 
 ## Chat feedback
 
