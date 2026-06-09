@@ -14,6 +14,8 @@ Run a `/who` search, then `/ww MESSAGE` whispers everyone in the results. That's
 
 You'll never whisper yourself or anyone in your party or raid.
 
+If a single `/ww` or `/ws` run would whisper more than 30 people, you'll get a confirmation prompt first so a near-full list can't go out by accident.
+
 ## Five optional extras for /ww
 
 Use any, all, or none — they compose in any order.
@@ -90,9 +92,9 @@ Up to 20 non-warlocks, on a 15-minute cooldown. Order doesn't matter.
 | `/wt MESSAGE` | Whisper your current target. |
 | `/wt -skip MESSAGE` | Whisper your target and add them to the skip list. |
 | `/ws MESSAGE` | Whisper every seller in the auction house Browse tab. |
-| `/rr [-N] [-name…] MESSAGE` | Reply to everyone who whispered you in the last 15 minutes, skipping anyone you already replied to within the last 30 minutes. `-N` caps to the last N most recent; any other `-word` skips names containing that substring (e.g. `-bob`). |
-| `/rr reset` or `/rr clear` | Reset the reply tracking point — only whispers received afterwards are replied to. Tracking isn't saved, so a `/reload` or re-login resets it too. |
-| `/wta` | Print the command and parameter reference to chat. |
+| `/rr MESSAGE` | Reply to everyone who has whispered you this session (minus your party and raid). Takes the same `-skip`, `-cd`, `-N`, and `-p` options as `/ww` — by default it replies to everyone, every time. `-N` caps to the most recent N. |
+| `/rr reset` or `/rr clear` | Forget everyone who has whispered you so far — only whispers received afterwards are replied to. The pool isn't saved, so a `/reload` or re-login resets it too. |
+| `/wta` | Open the command and parameter reference window. |
 | `/wta stop` | Cancel any whispers still queued to send (reports how many went out and how many were cancelled). |
 | `/wta reset` or `/wta clear` | Empty the skip list. |
 | `/wta clear cd` | Empty the cooldown history. |
@@ -100,11 +102,11 @@ Up to 20 non-warlocks, on a 15-minute cooldown. Order doesn't matter.
 
 ## Throttling
 
-Whispers are sent one every 0.5 seconds rather than all at once, so a big `/ww`, `/ws`, or `/rr` run stays under Blizzard's chat throttle instead of silently dropping messages or disconnecting you. The chat summary prints immediately; the whispers themselves trickle out over the following seconds. Spotted a mistake mid-run? `/wta stop` cancels whatever's still queued.
+Whispers are sent one every 250ms rather than all at once, so a big `/ww`, `/ws`, or `/rr` run stays under Blizzard's chat throttle instead of silently dropping messages or disconnecting you. The chat summary prints immediately; the whispers themselves trickle out over the following seconds. Spotted a mistake mid-run? `/wta stop` cancels whatever's still queued.
 
 ## Chat feedback
 
-Every `/ww` run prints a short summary to your chat frame: how many of your `/who` results are being whispered, the recipients (class-coloured), what each active flag skipped and why, and any persistent state that changed (new entries added to the skip list, new cooldowns recorded).
+Every `/ww` run prints a short summary to your chat frame: how many of your `/who` results are being whispered and how many were skipped.
 
 If no recipients are eligible (everyone got filtered out), you'll see a single line saying so along with the skip breakdown — useful for working out which flag is being too aggressive.
 

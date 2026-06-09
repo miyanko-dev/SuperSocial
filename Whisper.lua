@@ -87,6 +87,9 @@ local function buildGroupSet()
     return set
 end
 
+ns.nameOnly = nameOnly
+ns.buildGroupSet = buildGroupSet
+
 local function whisperTarget(input)
     input = trim(input or "")
     local tokens = {}
@@ -163,6 +166,14 @@ local function parseFlags(input)
     return opts
 end
 
+-- Shared with /rr so both commands parse flags and honour the same skip list
+-- and cooldown pool identically.
+ns.parseFlags = parseFlags
+ns.loadSkip = loadSkip
+ns.loadCooldowns = loadCooldowns
+ns.pruneCooldowns = pruneCooldowns
+ns.isCool = isCool
+
 local function isFiltered(info, terms)
     if #terms == 0 then return false end
     local class = (info.classStr or ""):lower()
@@ -172,6 +183,30 @@ local function isFiltered(info, terms)
         if area ~= "" and area:find(term, 1, true) then return true end
     end
     return false
+end
+
+local CONFIRM_THRESHOLD = 30
+
+StaticPopupDialogs["WHISPERTHEMALL_CONFIRM_SEND"] = {
+    text = "Whisper Them All: send to %d players?",
+    button1 = YES,
+    button2 = NO,
+    OnAccept = function(_, send) if send then send() end end,
+    timeout = 0,
+    whileDead = true,
+    hideOnEscape = true,
+    showAlert = true,
+    preferredIndex = 3,
+}
+
+-- Big bulk sends ask first, so a near-full /who or Browse list can't go out by
+-- accident. Smaller runs send straight away.
+local function confirmLargeSend(count, send)
+    if count <= CONFIRM_THRESHOLD then
+        send()
+    else
+        StaticPopup_Show("WHISPERTHEMALL_CONFIRM_SEND", count, nil, send)
+    end
 end
 
 local function dispatchWho(opts)
@@ -229,21 +264,25 @@ local function dispatchWho(opts)
         return
     end
 
-    -- Record skip-list / cooldown membership up front, then queue the sends so
-    -- they trickle out under the chat throttle.
-    for i = 1, sendCount do
-        local fullName = eligible[i]
-        ns.queueWhisper(opts.text, fullName)
-        if skip then skip[fullName] = true end
-        -- Only a timed -cd records new recipients; bare -cd just reads the list.
-        if cooldownBucket and cooldownMinutes then cooldownBucket[fullName] = time() end
+    -- Record skip-list / cooldown membership and queue the sends so they
+    -- trickle out under the chat throttle.
+    local function send()
+        for i = 1, sendCount do
+            local fullName = eligible[i]
+            ns.queueWhisper(opts.text, fullName)
+            if skip then skip[fullName] = true end
+            -- Only a timed -cd records new recipients; bare -cd just reads the list.
+            if cooldownBucket and cooldownMinutes then cooldownBucket[fullName] = time() end
+        end
+
+        local line = tint("sent", "Whispering " .. sendCount) .. " of " .. count .. " /who " .. plural(count, "result", "results")
+        if skipped > 0 then
+            line = line .. ", " .. tint("skip", skipped .. " skipped")
+        end
+        status(line .. ".")
     end
 
-    local line = tint("sent", "Whispering " .. sendCount) .. " of " .. count .. " /who " .. plural(count, "result", "results")
-    if skipped > 0 then
-        line = line .. ", " .. tint("skip", skipped .. " skipped")
-    end
-    status(line .. ".")
+    confirmLargeSend(sendCount, send)
 end
 
 local function whisperWho(input)
@@ -292,49 +331,20 @@ local function whisperSellers(input)
         detail(tint("muted", "Message:") .. " " .. text)
         return
     end
-    for _, sellerName in ipairs(names) do
-        ns.queueWhisper(text, sellerName)
+    local function send()
+        for _, sellerName in ipairs(names) do
+            ns.queueWhisper(text, sellerName)
+        end
+        status(tint("sent", "Whispering " .. #names) .. " auction " .. plural(#names, "seller", "sellers") .. ".")
     end
-    status(tint("sent", "Whispering " .. #names) .. " auction " .. plural(#names, "seller", "sellers") .. ".")
-end
 
-local COMMANDS_HELP = {
-    "|cffffd200/ww MESSAGE|r — Whisper everyone in your /who results.",
-    "|cffffd200/wt MESSAGE|r — Whisper your current target.",
-    "|cffffd200/ws MESSAGE|r — Whisper every seller in the auction house Browse tab.",
-    "|cffffd200/rr MESSAGE|r — Reply to everyone who whispered you in the last 15 min (skipping anyone you replied to in the last 30 min). \"/rr reset\" (or clear) ignores earlier whispers.",
-    "|cffffd200/wta|r — Print this help.",
-    "|cffffd200/wta stop|r — Cancel any whispers still queued to send.",
-    "|cffffd200/wta reset|r — Empty the skip list (\"/wta clear\" too).",
-    "|cffffd200/wta clear cd|r — Empty the cooldown history.",
-    "|cffffd200/wta clear all|r — Empty both.",
-}
-
-local PARAMETERS_HELP = {
-    "|cffffd200-N|r — (/ww, /rr) Whisper only the first N recipients, e.g. -10.",
-    "|cffffd200-not VALUE|r — (/ww) Skip a class (Warrior, Mage, …) or a zone (substring match). Separate multiple values with commas; spaces around the commas are fine.",
-    "|cffffd200-skip|r — (/ww, /wt) Skip anyone on the skip list, and add successful recipients to it.",
-    "|cffffd200-cd M|r — (/ww) Skip anyone whispered in the last M minutes, and remember new recipients for M minutes.",
-    "|cffffd200-cd|r — (/ww) With no M, skip anyone already on the cooldown list without adding new recipients to it.",
-    "|cffffd200-p|r — (/ww, /ws, /rr) Preview only: show how many you'd whisper and the message, send nothing.",
-    "|cffffd200-word|r — (/rr) Skip recent whisperers whose name contains word, e.g. -bob.",
-}
-
-local function printHelp()
-    status("Commands")
-    for _, line in ipairs(COMMANDS_HELP) do
-        detail(line)
-    end
-    status("Parameters")
-    for _, line in ipairs(PARAMETERS_HELP) do
-        detail(line)
-    end
+    confirmLargeSend(#names, send)
 end
 
 local function adminCommand(input)
     input = trim(input):lower()
-    if input == "" then
-        printHelp()
+    if input == "" or input == "help" then
+        ns.toggleHelp()
     elseif input == "stop" then
         local sent, dropped = ns.cancelQueue()
         if sent == 0 and dropped == 0 then
