@@ -3,7 +3,7 @@ local _, ns = ...
 local applyingColor = false
 
 local tint = ns.tint
-local status, detail = ns.status, ns.detail
+local status = ns.status
 local plural = ns.plural
 local className = ns.className
 
@@ -228,17 +228,22 @@ local function dispatchWho(opts)
         end
     end
 
+    local skippedGroup, skippedFilter, skippedSkip, skippedCool = 0, 0, 0, 0
     local eligible = {}
     for i = 1, count do
         local info = C_FriendList.GetWhoInfo(i)
         local fullName = info and info.fullName
         if fullName then
             local short = nameOnly(fullName)
-            local excluded = groupSet[short or fullName]
-                or isFiltered(info, opts.terms)
-                or (skip and skip[fullName])
-                or (cooldownBucket and not isCool(cooldownBucket, fullName, opts.cooldownSeconds))
-            if not excluded then
+            if groupSet[short or fullName] then
+                skippedGroup = skippedGroup + 1
+            elseif isFiltered(info, opts.terms) then
+                skippedFilter = skippedFilter + 1
+            elseif skip and skip[fullName] then
+                skippedSkip = skippedSkip + 1
+            elseif cooldownBucket and not isCool(cooldownBucket, fullName, opts.cooldownSeconds) then
+                skippedCool = skippedCool + 1
+            else
                 eligible[#eligible + 1] = fullName
             end
         end
@@ -247,26 +252,48 @@ local function dispatchWho(opts)
     local eligibleCount = #eligible
     local sendCount = opts.limit and math.min(opts.limit, eligibleCount) or eligibleCount
 
+    -- Counts behind the "N skipped" total, in the order the breakdown reads.
+    local skipCounts = {
+        skiplist = skippedSkip,
+        cooldown = skippedCool,
+        filter = skippedFilter,
+        group = skippedGroup,
+        limit = eligibleCount - sendCount,
+    }
+
     if sendCount == 0 then
-        status(tint("skip", "Nobody to whisper") .. " — 0 of " .. count .. " /who " .. plural(count, "result", "results") .. " eligible.")
+        local line = tint("skip", "Nobody to whisper") .. " — 0 of " .. count .. " /who " .. plural(count, "result", "results") .. " eligible"
+        local why = ns.skipBreakdown(skipCounts)
+        if why then line = line .. " (" .. why .. ")" end
+        status(line .. ".")
         return
     end
 
     local skipped = count - sendCount
 
-    if opts.preview then
-        local line = tint("muted", "Preview") .. " — would whisper " .. sendCount .. " of " .. count .. " /who " .. plural(count, "result", "results")
+    -- Fold the count, skip breakdown, and list changes into one status line.
+    local function summarize(lead, isPreview)
+        local line = lead .. " of " .. count .. " /who " .. plural(count, "result", "results")
         if skipped > 0 then
             line = line .. ", " .. tint("skip", skipped .. " skipped")
+            local why = ns.skipBreakdown(skipCounts)
+            if why then line = line .. " (" .. why .. ")" end
         end
-        status(line .. ".")
-        detail(tint("muted", "Message:") .. " " .. opts.text)
+        local applied = ns.appliedSummary(sendCount, skip ~= nil, cooldownMinutes, isPreview)
+        if applied then line = line .. ", " .. applied end
+        return line
+    end
+
+    if opts.preview then
+        status(summarize(tint("muted", "Preview") .. " — would whisper " .. sendCount, true)
+            .. ". " .. tint("muted", "Message:") .. " " .. opts.text)
         return
     end
 
-    -- Record skip-list / cooldown membership and queue the sends so they
-    -- trickle out under the chat throttle.
+    -- Summary first, so "starting whispers" leads the outgoing whisper lines;
+    -- the queue then trickles them out under the chat throttle.
     local function send()
+        status(summarize(tint("sent", "Whispering " .. sendCount), false) .. " — " .. tint("muted", "starting whispers"))
         for i = 1, sendCount do
             local fullName = eligible[i]
             ns.queueWhisper(opts.text, fullName)
@@ -274,12 +301,6 @@ local function dispatchWho(opts)
             -- Only a timed -cd records new recipients; bare -cd just reads the list.
             if cooldownBucket and cooldownMinutes then cooldownBucket[fullName] = time() end
         end
-
-        local line = tint("sent", "Whispering " .. sendCount) .. " of " .. count .. " /who " .. plural(count, "result", "results")
-        if skipped > 0 then
-            line = line .. ", " .. tint("skip", skipped .. " skipped")
-        end
-        status(line .. ".")
     end
 
     confirmLargeSend(sendCount, send)
@@ -327,15 +348,15 @@ local function whisperSellers(input)
         return
     end
     if preview then
-        status(tint("muted", "Preview") .. " — would whisper " .. #names .. " auction " .. plural(#names, "seller", "sellers") .. ".")
-        detail(tint("muted", "Message:") .. " " .. text)
+        status(tint("muted", "Preview") .. " — would whisper " .. #names .. " auction " .. plural(#names, "seller", "sellers")
+            .. ". " .. tint("muted", "Message:") .. " " .. text)
         return
     end
     local function send()
+        status(tint("sent", "Whispering " .. #names) .. " auction " .. plural(#names, "seller", "sellers") .. " — " .. tint("muted", "starting whispers"))
         for _, sellerName in ipairs(names) do
             ns.queueWhisper(text, sellerName)
         end
-        status(tint("sent", "Whispering " .. #names) .. " auction " .. plural(#names, "seller", "sellers") .. ".")
     end
 
     confirmLargeSend(#names, send)
