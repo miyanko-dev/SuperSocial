@@ -290,10 +290,10 @@ local function dispatchWho(opts)
         return
     end
 
-    -- Summary first, so "Sending now." leads the outgoing whisper lines; the
-    -- queue then trickles them out under the chat throttle.
+    -- Summary first, so it leads the outgoing whisper lines; the queue then
+    -- trickles them out under the chat throttle.
     local function send()
-        status(summarize(tint("sent", "Whispering " .. sendCount), false) .. ". " .. tint("muted", "Sending now."))
+        status(summarize(tint("sent", "Whispering " .. sendCount), false) .. ".")
         for i = 1, sendCount do
             local fullName = eligible[i]
             ns.queueWhisper(opts.text, fullName)
@@ -353,7 +353,7 @@ local function whisperSellers(input)
         return
     end
     local function send()
-        status(tint("sent", "Whispering " .. #names) .. " auction " .. plural(#names, "seller", "sellers") .. ". " .. tint("muted", "Sending now."))
+        status(tint("sent", "Whispering " .. #names) .. " auction " .. plural(#names, "seller", "sellers") .. ".")
         for _, sellerName in ipairs(names) do
             ns.queueWhisper(text, sellerName)
         end

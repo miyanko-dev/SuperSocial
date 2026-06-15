@@ -101,8 +101,8 @@ local function replyRecent(input)
         return
     end
 
-    -- Summary first, so "Sending now." leads the outgoing whisper lines.
-    status(summarize(tint("sent", "Replying to " .. sendCount), false) .. ". " .. tint("muted", "Sending now."))
+    -- Summary first, so it leads the outgoing whisper lines.
+    status(summarize(tint("sent", "Replying to " .. sendCount), false) .. ".")
     for i = 1, sendCount do
         local fullName = eligible[i]
         ns.queueWhisper(opts.text, fullName)
