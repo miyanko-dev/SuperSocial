@@ -3,7 +3,7 @@ local _, ns = ...
 -- One place for every WhisperThemAll chat line, so whispered, skipped, and
 -- cooldown messages all read with the same colours, layout, and spacing.
 
-local PREFIX = "|cff66ccffWhisperThemAll|r"
+local PREFIX = "|cff66ccffWhisper Them All|r"
 
 local COLORS = {
     sent  = "ff5cd65c", -- green — whispers that went out
@@ -18,10 +18,11 @@ local function tint(key, text)
     return "|c" .. COLORS[key] .. text .. "|r"
 end
 
--- One status line per event: an arrow marker, the addon tag, then the whole
--- summary. Everything stays on a single line — no bullets, no detail block.
+-- One status line per event: the addon tag in brackets, then the whole summary,
+-- written to read like a quick note from a whisper assistant. Everything stays
+-- on a single line, with no bullets and no detail block.
 local function status(text)
-    DEFAULT_CHAT_FRAME:AddMessage(tint("muted", "→") .. " " .. PREFIX .. "  " .. text)
+    DEFAULT_CHAT_FRAME:AddMessage("[" .. PREFIX .. "]: " .. text)
 end
 
 -- Class colour as a |cAARRGGBB string, or nil when the class is unknown.

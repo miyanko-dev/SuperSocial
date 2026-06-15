@@ -20,7 +20,7 @@ local function replyRecent(input)
     local command = input:lower()
     if command == "reset" or command == "clear" then
         wipe(whisperedAt)
-        status("Reply tracking reset — only people who whisper you from now on will be replied to.")
+        status("Reply tracking reset. From now on I'll only reply to people who whisper you.")
         return
     end
 
@@ -73,7 +73,7 @@ local function replyRecent(input)
     }
 
     if sendCount == 0 then
-        local line = tint("skip", "Nobody to reply to") .. " — 0 of " .. total .. " eligible"
+        local line = tint("skip", "Nobody to reply to.") .. " None of " .. total .. " are eligible"
         local why = ns.skipBreakdown(skipCounts)
         if why then line = line .. " (" .. why .. ")" end
         status(line .. ".")
@@ -96,13 +96,13 @@ local function replyRecent(input)
     end
 
     if opts.preview then
-        status(summarize(tint("muted", "Preview") .. " — would reply to " .. sendCount, true)
+        status(summarize(tint("muted", "Preview.") .. " I'd reply to " .. sendCount, true)
             .. ". " .. tint("muted", "Message:") .. " " .. opts.text)
         return
     end
 
-    -- Summary first, so "starting whispers" leads the outgoing whisper lines.
-    status(summarize(tint("sent", "Replying to " .. sendCount), false) .. " — " .. tint("muted", "starting whispers"))
+    -- Summary first, so "Sending now." leads the outgoing whisper lines.
+    status(summarize(tint("sent", "Replying to " .. sendCount), false) .. ". " .. tint("muted", "Sending now."))
     for i = 1, sendCount do
         local fullName = eligible[i]
         ns.queueWhisper(opts.text, fullName)

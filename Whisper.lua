@@ -103,7 +103,7 @@ local function whisperTarget(input)
     local text = table.concat(tokens, " ", cursor)
     if text == "" then return end
     if not (UnitExists("target") and UnitIsPlayer("target")) then
-        status(tint("skip", "No player targeted") .. " — target someone first.")
+        status(tint("skip", "No target selected.") .. " Pick a player first and I'll whisper them.")
         return
     end
     local targetName = UnitName("target")
@@ -212,7 +212,7 @@ end
 local function dispatchWho(opts)
     local count = C_FriendList.GetNumWhoResults()
     if count == 0 then
-        status(tint("skip", "No /who results") .. " — run /who first.")
+        status(tint("skip", "No /who results yet.") .. " Run /who first and I'll whisper them.")
         return
     end
 
@@ -262,7 +262,7 @@ local function dispatchWho(opts)
     }
 
     if sendCount == 0 then
-        local line = tint("skip", "Nobody to whisper") .. " — 0 of " .. count .. " /who " .. plural(count, "result", "results") .. " eligible"
+        local line = tint("skip", "Nobody to whisper.") .. " None of " .. count .. " /who " .. plural(count, "result", "results") .. " are eligible"
         local why = ns.skipBreakdown(skipCounts)
         if why then line = line .. " (" .. why .. ")" end
         status(line .. ".")
@@ -285,15 +285,15 @@ local function dispatchWho(opts)
     end
 
     if opts.preview then
-        status(summarize(tint("muted", "Preview") .. " — would whisper " .. sendCount, true)
+        status(summarize(tint("muted", "Preview.") .. " I'd whisper " .. sendCount, true)
             .. ". " .. tint("muted", "Message:") .. " " .. opts.text)
         return
     end
 
-    -- Summary first, so "starting whispers" leads the outgoing whisper lines;
-    -- the queue then trickles them out under the chat throttle.
+    -- Summary first, so "Sending now." leads the outgoing whisper lines; the
+    -- queue then trickles them out under the chat throttle.
     local function send()
-        status(summarize(tint("sent", "Whispering " .. sendCount), false) .. " — " .. tint("muted", "starting whispers"))
+        status(summarize(tint("sent", "Whispering " .. sendCount), false) .. ". " .. tint("muted", "Sending now."))
         for i = 1, sendCount do
             local fullName = eligible[i]
             ns.queueWhisper(opts.text, fullName)
@@ -339,7 +339,7 @@ local function whisperSellers(input)
     local text = input
     if text == "" then return end
     if not AuctionFrame or not AuctionFrame:IsShown() then
-        status(tint("skip", "Auction house closed") .. " — open the Browse tab first.")
+        status(tint("skip", "Auction house closed.") .. " Open the Browse tab and I'll whisper the sellers.")
         return
     end
     local names = collectAuctionSellers()
@@ -348,12 +348,12 @@ local function whisperSellers(input)
         return
     end
     if preview then
-        status(tint("muted", "Preview") .. " — would whisper " .. #names .. " auction " .. plural(#names, "seller", "sellers")
+        status(tint("muted", "Preview.") .. " I'd whisper " .. #names .. " auction " .. plural(#names, "seller", "sellers")
             .. ". " .. tint("muted", "Message:") .. " " .. text)
         return
     end
     local function send()
-        status(tint("sent", "Whispering " .. #names) .. " auction " .. plural(#names, "seller", "sellers") .. " — " .. tint("muted", "starting whispers"))
+        status(tint("sent", "Whispering " .. #names) .. " auction " .. plural(#names, "seller", "sellers") .. ". " .. tint("muted", "Sending now."))
         for _, sellerName in ipairs(names) do
             ns.queueWhisper(text, sellerName)
         end
@@ -369,9 +369,9 @@ local function adminCommand(input)
     elseif input == "stop" then
         local sent, dropped = ns.cancelQueue()
         if sent == 0 and dropped == 0 then
-            status(tint("skip", "Nothing to stop") .. " — no whispers queued.")
+            status(tint("skip", "Nothing to stop.") .. " No whispers are queued.")
         else
-            status(tint("skip", "Stopped") .. " — " .. sent .. " sent, " .. dropped .. " " .. plural(dropped, "whisper", "whispers") .. " cancelled.")
+            status(tint("skip", "Stopped.") .. " " .. sent .. " sent, " .. dropped .. " " .. plural(dropped, "whisper", "whispers") .. " cancelled.")
         end
     elseif input == "reset" or input == "clear" then
         clearSkip()
