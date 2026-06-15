@@ -112,4 +112,4 @@ If no recipients are eligible (everyone got filtered out), you'll see a single l
 
 ## Chat colour
 
-Incoming whispers are recoloured to a softer blend of your outgoing whisper colour, so both sides of a conversation read consistently.
+Incoming whispers are recoloured to a softer blend of your outgoing whisper colour, so both sides of a conversation read consistently. The `[Whisper Them All]` tag on the addon's own status lines uses that same colour.

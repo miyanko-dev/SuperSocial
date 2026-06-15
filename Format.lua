@@ -3,7 +3,9 @@ local _, ns = ...
 -- One place for every WhisperThemAll chat line, so whispered, skipped, and
 -- cooldown messages all read with the same colours, layout, and spacing.
 
-local PREFIX = "|cff66ccffWhisper Them All|r"
+-- The tag shown on every status line, coloured to match incoming whispers so
+-- the addon's notes sit alongside your whisper conversation.
+local SENDER = "Whisper Them All"
 
 local COLORS = {
     sent  = "ff5cd65c", -- green — whispers that went out
@@ -18,11 +20,18 @@ local function tint(key, text)
     return "|c" .. COLORS[key] .. text .. "|r"
 end
 
--- One status line per event: the addon tag in brackets, then the whole summary,
--- written to read like a quick note from a whisper assistant. Everything stays
--- on a single line, with no bullets and no detail block.
+-- Hex of the incoming whisper colour, so the [Whisper Them All] tag matches the
+-- whispers it sits beside. Read at print time to track any recolour.
+local function whisperHex()
+    local c = (ChatTypeInfo and ChatTypeInfo.WHISPER) or { r = 1, g = 0.5, b = 1 }
+    return string.format("ff%02x%02x%02x", c.r * 255, c.g * 255, c.b * 255)
+end
+
+-- One status line per event: a [Whisper Them All] tag in the incoming whisper
+-- colour, then the whole summary. Inline semantic colours in `text` carry their
+-- own and show through.
 local function status(text)
-    DEFAULT_CHAT_FRAME:AddMessage("[" .. PREFIX .. "]: " .. text)
+    DEFAULT_CHAT_FRAME:AddMessage("|c" .. whisperHex() .. "[" .. SENDER .. "]|r: " .. text)
 end
 
 -- Class colour as a |cAARRGGBB string, or nil when the class is unknown.
