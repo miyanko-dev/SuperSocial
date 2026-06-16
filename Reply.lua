@@ -4,14 +4,21 @@ local tint = ns.tint
 local status = ns.status
 local plural = ns.plural
 
--- Everyone who has whispered us this session, name -> most recent timestamp.
--- This is the /rr recipient pool. It isn't persisted: a reload, relog, or
--- "/rr reset" clears it. Replying skips nobody by default — only -skip and -cd
--- filter, exactly as on /ww.
-local whisperedAt = {}
+-- /rr replies to the people from your most recent /ww blast who have whispered
+-- you back. /ww records the batch; the listener below marks which of them
+-- replied. The batch is session-only and replaced on every /ww, so /rr always
+-- targets the latest blast — never random whisperers or an earlier batch.
+local batchByShort = {}    -- short name -> the full "Name-Realm" we whispered
+local batchRepliedAt = {}  -- short name -> time that batch member whispered back
 
-local function trackWhisper(name)
-    whisperedAt[name] = time()
+-- Called by /ww after a send: these names become the new batch, clearing the
+-- previous one and any replies it had collected.
+function ns.beginReplyBatch(names)
+    wipe(batchByShort)
+    wipe(batchRepliedAt)
+    for _, fullName in ipairs(names) do
+        batchByShort[ns.nameOnly(fullName)] = fullName
+    end
 end
 
 local function replyRecent(input)
@@ -19,18 +26,30 @@ local function replyRecent(input)
 
     local command = input:lower()
     if command == "reset" or command == "clear" then
-        wipe(whisperedAt)
-        status("Reply tracking reset. From now on I'll only reply to people who whisper you.")
+        wipe(batchByShort)
+        wipe(batchRepliedAt)
+        status("Reply tracking reset. Run /ww, then /rr replies to whoever whispers back.")
         return
     end
 
     local opts = ns.parseFlags(input)
-    if not opts.text or opts.text == "" then return end
+    if not opts.text or opts.text == "" then
+        status(tint("muted", "Usage:") .. " /rr MESSAGE — reply to everyone from your last /ww who whispered back. "
+            .. tint("muted", "e.g.") .. " " .. tint("cool", "/rr invite incoming!") .. ".")
+        return
+    end
 
-    local total = 0
-    for _ in pairs(whisperedAt) do total = total + 1 end
-    if total == 0 then
-        status(tint("skip", "No whisperers") .. " to reply to.")
+    local batchSize = 0
+    for _ in pairs(batchByShort) do batchSize = batchSize + 1 end
+    if batchSize == 0 then
+        status(tint("skip", "No /ww batch yet.") .. " Run /ww first, then /rr replies to whoever whispers back.")
+        return
+    end
+
+    local replied = 0
+    for _ in pairs(batchRepliedAt) do replied = replied + 1 end
+    if replied == 0 then
+        status(tint("skip", "No replies yet") .. " from your last /ww batch (" .. batchSize .. " whispered).")
         return
     end
 
@@ -46,21 +65,24 @@ local function replyRecent(input)
         end
     end
 
-    -- Sorted newest-first so a -N limit keeps the most recent whisperers.
     local skippedGroup, skippedSkip, skippedCool = 0, 0, 0
     local eligible = {}
-    for name in pairs(whisperedAt) do
-        if groupSet[ns.nameOnly(name)] then
+    for short in pairs(batchRepliedAt) do
+        local fullName = batchByShort[short]
+        if groupSet[short] then
             skippedGroup = skippedGroup + 1
-        elseif skip and skip[name] then
+        elseif skip and skip[fullName] then
             skippedSkip = skippedSkip + 1
-        elseif cooldownBucket and not ns.isCool(cooldownBucket, name, opts.cooldownSeconds) then
+        elseif cooldownBucket and not ns.isCool(cooldownBucket, fullName, opts.cooldownSeconds) then
             skippedCool = skippedCool + 1
         else
-            eligible[#eligible + 1] = name
+            eligible[#eligible + 1] = fullName
         end
     end
-    table.sort(eligible, function(a, b) return whisperedAt[a] > whisperedAt[b] end)
+    -- Newest reply first, so a -N limit keeps the most recent repliers.
+    table.sort(eligible, function(a, b)
+        return batchRepliedAt[ns.nameOnly(a)] > batchRepliedAt[ns.nameOnly(b)]
+    end)
 
     local sendCount = opts.limit and math.min(opts.limit, #eligible) or #eligible
 
@@ -73,18 +95,18 @@ local function replyRecent(input)
     }
 
     if sendCount == 0 then
-        local line = tint("skip", "Nobody to reply to.") .. " None of " .. total .. " are eligible"
+        local line = tint("skip", "Nobody to reply to.") .. " None of " .. replied .. " who replied are eligible"
         local why = ns.skipBreakdown(skipCounts)
         if why then line = line .. " (" .. why .. ")" end
         status(line .. ".")
         return
     end
 
-    local skipped = total - sendCount
+    local skipped = replied - sendCount
 
-    -- Fold the count, skip breakdown, and list changes into one status line.
+    -- Fold the count, skip breakdown, and what the reply records into one line.
     local function summarize(lead, isPreview)
-        local line = lead .. " of " .. total .. " " .. plural(total, "whisperer", "whisperers")
+        local line = lead .. " of " .. replied .. " who replied"
         if skipped > 0 then
             line = line .. ", " .. tint("skip", skipped .. " skipped")
             local why = ns.skipBreakdown(skipCounts)
@@ -112,10 +134,14 @@ local function replyRecent(input)
     end
 end
 
+-- Mark a reply only when it comes from someone in the current /ww batch.
 local listener = CreateFrame("Frame")
 listener:RegisterEvent("CHAT_MSG_WHISPER")
 listener:SetScript("OnEvent", function(_, _, _, sender)
-    trackWhisper(sender)
+    local short = ns.nameOnly(sender)
+    if short and batchByShort[short] then
+        batchRepliedAt[short] = time()
+    end
 end)
 
 SLASH_REPLYRECENT1 = "/rr"

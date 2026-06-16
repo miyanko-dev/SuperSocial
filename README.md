@@ -14,9 +14,9 @@ Run a `/who` search, then `/ww MESSAGE` whispers everyone in the results. That's
 
 You'll never whisper yourself or anyone in your party or raid.
 
-If a single `/ww` or `/ws` run would whisper more than 30 people, you'll get a confirmation prompt first so a near-full list can't go out by accident.
+If a single `/ww` or `/ws` run would whisper more than 20 people, you'll get a confirmation prompt first so a near-full list can't go out by accident.
 
-## Five optional extras for /ww
+## Six optional extras for /ww
 
 Use any, all, or none — they compose in any order.
 
@@ -46,6 +46,15 @@ Whispers only the first 10 people from your `/who` results. The same `-N` works 
 ```
 
 `-not` skips anyone whose class matches (Warrior, Mage, Warlock, …) or whose zone contains the word (Maraudon, Stormwind, …). Separate multiple with commas — spaces around the commas are fine (`Warlock,Maraudon` and `Warlock, Maraudon` both work). Note that a trailing comma means "another term follows", so the next word is read as a filter rather than part of your message.
+
+### Whisper only certain classes or zones
+
+```
+/ww -only Priest,Paladin LFM healer for SM
+/ww -only Mage WTS portals to any major city
+```
+
+`-only` is the inverse of `-not`: it whispers **only** people whose class matches or whose zone contains the word, dropping everyone else. Same comma rules as `-not`. Combine the two to include a class but drop a zone (`-not Maraudon -only Priest`); when a player matches both, `-not` wins and they're skipped.
 
 ### Don't whisper the same people twice
 
@@ -92,8 +101,8 @@ Up to 20 non-warlocks, on a 15-minute cooldown. Order doesn't matter.
 | `/wt MESSAGE` | Whisper your current target. |
 | `/wt -skip MESSAGE` | Whisper your target and add them to the skip list. |
 | `/ws MESSAGE` | Whisper every seller in the auction house Browse tab. |
-| `/rr MESSAGE` | Reply to everyone who has whispered you this session (minus your party and raid). Takes the same `-skip`, `-cd`, `-N`, and `-p` options as `/ww` — by default it replies to everyone, every time. `-N` caps to the most recent N. |
-| `/rr reset` or `/rr clear` | Forget everyone who has whispered you so far — only whispers received afterwards are replied to. The pool isn't saved, so a `/reload` or re-login resets it too. |
+| `/rr MESSAGE` | Reply to everyone from your last `/ww` who has whispered you back (minus your party and raid). Each `/ww` starts a fresh batch, so `/rr` always targets the latest blast. Takes the same `-skip`, `-cd`, `-N`, and `-p` options as `/ww`; `-N` caps to the most recent repliers. |
+| `/rr reset` or `/rr clear` | Forget the current batch and its replies. The batch isn't saved, so a `/reload`, re-login, or the next `/ww` resets it too. |
 | `/wta` | Open the command and parameter reference window. |
 | `/wta stop` | Cancel any whispers still queued to send (reports how many went out and how many were cancelled). |
 | `/wta reset` or `/wta clear` | Empty the skip list. |

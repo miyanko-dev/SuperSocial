@@ -2,7 +2,7 @@
 ## Title: Whisper Them All!
 ## Notes: Whisper and reply tools for WoW Classic 1.15.x.
 ## Author: MIYANKO
-## Version: 1.8.1
+## Version: 1.9.0
 ## IconTexture: 134149
 ## SavedVariables: WhisperThemAllDB
 

@@ -26,8 +26,8 @@ local COMMANDS = {
     },
     {
         cmd = "/rr",
-        desc = "Reply to everyone who has whispered you this session. Add -cd to avoid replying to the same people again.",
-        eg = "/rr -cd 30 back in 5, hold the spot",
+        desc = "Reply to everyone from your last /ww who whispered you back. Each /ww starts a fresh batch.",
+        eg = "/rr invite incoming, whisper me",
     },
     {
         cmd = "/wta",
@@ -54,6 +54,12 @@ local OPTIONS = {
         on = "/ww",
         desc = "Skip a class (Warrior, Mage, …) or a zone (substring match). Separate several with commas.",
         eg = "/ww -not Warlock, Maraudon LFM healer",
+    },
+    {
+        cmd = "-only",
+        on = "/ww",
+        desc = "The inverse of -not: whisper only players matching a class or zone. Separate several with commas.",
+        eg = "/ww -only Priest, Paladin LFM healer",
     },
     {
         cmd = "-skip",

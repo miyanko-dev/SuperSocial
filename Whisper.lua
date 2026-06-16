@@ -101,7 +101,12 @@ local function whisperTarget(input)
         cursor = cursor + 1
     end
     local text = table.concat(tokens, " ", cursor)
-    if text == "" then return end
+    if text == "" then
+        status(tint("muted", "Usage:") .. " /wt MESSAGE — whisper your current target ("
+            .. tint("muted", "-skip") .. " also skip-lists them). "
+            .. tint("muted", "e.g.") .. " " .. tint("cool", "/wt got room for one more?") .. ".")
+        return
+    end
     if not (UnitExists("target") and UnitIsPlayer("target")) then
         status(tint("skip", "No target selected.") .. " Pick a player first and I'll whisper them.")
         return
@@ -117,7 +122,7 @@ local function parseFlags(input)
     local tokens = {}
     for t in input:gmatch("%S+") do tokens[#tokens + 1] = t end
     local cursor = 1
-    local opts = { terms = {}, useSkip = false }
+    local opts = { terms = {}, includeTerms = {}, useSkip = false }
     while cursor <= #tokens do
         local flag = tokens[cursor]
         local value = tokens[cursor + 1]
@@ -139,7 +144,8 @@ local function parseFlags(input)
         elseif flag == "-p" then
             opts.preview = true
             cursor = cursor + 1
-        elseif flag == "-not" and value then
+        elseif (flag == "-not" or flag == "-only") and value then
+            local bucket = (flag == "-only") and opts.includeTerms or opts.terms
             local raw = value
             cursor = cursor + 2
             -- Keep absorbing tokens while the comma list is still open, so
@@ -153,7 +159,7 @@ local function parseFlags(input)
             for term in raw:gmatch("[^,]+") do
                 local cleaned = trim(term):lower()
                 if cleaned ~= "" then
-                    opts.terms[#opts.terms + 1] = cleaned
+                    bucket[#bucket + 1] = cleaned
                 end
             end
         else
@@ -185,7 +191,20 @@ local function isFiltered(info, terms)
     return false
 end
 
-local CONFIRM_THRESHOLD = 30
+-- -only is the inverse of -not: with terms set, a player must match at least
+-- one (class exactly, or zone as a substring) to qualify. No terms = everyone.
+local function isIncluded(info, includeTerms)
+    if #includeTerms == 0 then return true end
+    local class = (info.classStr or ""):lower()
+    local area = (info.area or ""):lower()
+    for _, term in ipairs(includeTerms) do
+        if term == class then return true end
+        if area ~= "" and area:find(term, 1, true) then return true end
+    end
+    return false
+end
+
+local CONFIRM_THRESHOLD = 20
 
 StaticPopupDialogs["WHISPERTHEMALL_CONFIRM_SEND"] = {
     text = "Whisper Them All: send to %d players?",
@@ -238,6 +257,8 @@ local function dispatchWho(opts)
             if groupSet[short or fullName] then
                 skippedGroup = skippedGroup + 1
             elseif isFiltered(info, opts.terms) then
+                skippedFilter = skippedFilter + 1
+            elseif not isIncluded(info, opts.includeTerms) then
                 skippedFilter = skippedFilter + 1
             elseif skip and skip[fullName] then
                 skippedSkip = skippedSkip + 1
@@ -294,13 +315,17 @@ local function dispatchWho(opts)
     -- trickles them out under the chat throttle.
     local function send()
         status(summarize(tint("sent", "Whispering " .. sendCount), false) .. ".")
+        local sentNames = {}
         for i = 1, sendCount do
             local fullName = eligible[i]
             ns.queueWhisper(opts.text, fullName)
+            sentNames[#sentNames + 1] = fullName
             if skip then skip[fullName] = true end
             -- Only a timed -cd records new recipients; bare -cd just reads the list.
             if cooldownBucket and cooldownMinutes then cooldownBucket[fullName] = time() end
         end
+        -- This blast becomes the /rr batch: replies from these names feed /rr.
+        ns.beginReplyBatch(sentNames)
     end
 
     confirmLargeSend(sendCount, send)
@@ -308,7 +333,11 @@ end
 
 local function whisperWho(input)
     local opts = parseFlags(trim(input))
-    if not opts.text or opts.text == "" then return end
+    if not opts.text or opts.text == "" then
+        status(tint("muted", "Usage:") .. " /ww MESSAGE — whisper everyone in your current /who results. "
+            .. tint("muted", "e.g.") .. " " .. tint("cool", "/ww LFM SM live") .. ".  Type /wta for all options.")
+        return
+    end
     dispatchWho(opts)
 end
 
@@ -337,7 +366,11 @@ local function whisperSellers(input)
         input = trim(input:gsub("^%-p", "", 1))
     end
     local text = input
-    if text == "" then return end
+    if text == "" then
+        status(tint("muted", "Usage:") .. " /ws MESSAGE — whisper every seller in the auction house Browse tab. "
+            .. tint("muted", "e.g.") .. " " .. tint("cool", "/ws still selling your Black Lotus?") .. ".")
+        return
+    end
     if not AuctionFrame or not AuctionFrame:IsShown() then
         status(tint("skip", "Auction house closed.") .. " Open the Browse tab and I'll whisper the sellers.")
         return
