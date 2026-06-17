@@ -17,17 +17,29 @@ end
 
 local function loadSkip()
     WhisperThemAllDB = WhisperThemAllDB or {}
-    WhisperThemAllDB.ignoredByChar = WhisperThemAllDB.ignoredByChar or {}
-    local key = playerKey()
-    local bucket = WhisperThemAllDB.ignoredByChar[key] or {}
-    WhisperThemAllDB.ignoredByChar[key] = bucket
 
+    -- One account-wide skip list shared by every character.
+    local bucket = WhisperThemAllDB.ignoredAccount or {}
+    WhisperThemAllDB.ignoredAccount = bucket
+
+    -- Migrate per-character buckets into the shared list.
+    if WhisperThemAllDB.ignoredByChar then
+        for _, charBucket in pairs(WhisperThemAllDB.ignoredByChar) do
+            for name in pairs(charBucket) do
+                bucket[name] = true
+            end
+        end
+        WhisperThemAllDB.ignoredByChar = nil
+    end
+
+    -- Migrate the pre-per-char flat list as well.
     if WhisperThemAllDB.ignored then
         for name in pairs(WhisperThemAllDB.ignored) do
             bucket[name] = true
         end
         WhisperThemAllDB.ignored = nil
     end
+
     return bucket
 end
 
