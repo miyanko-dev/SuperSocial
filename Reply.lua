@@ -54,29 +54,14 @@ local function replyRecent(input)
     end
 
     local groupSet = ns.buildGroupSet()
-    local skip = opts.useSkip and ns.loadSkip() or nil
-    local cooldownBucket
-    local cooldownMinutes
-    if opts.useCooldown then
-        cooldownBucket = ns.loadCooldowns()
-        if opts.cooldownSeconds then
-            ns.pruneCooldowns(cooldownBucket, opts.cooldownSeconds)
-            cooldownMinutes = math.floor(opts.cooldownSeconds / 60)
-        end
-    end
 
-    local skippedGroup, skippedSkip, skippedCool = 0, 0, 0
+    local skippedGroup = 0
     local eligible = {}
     for short in pairs(batchRepliedAt) do
-        local fullName = batchByShort[short]
         if groupSet[short] then
             skippedGroup = skippedGroup + 1
-        elseif skip and skip[fullName] then
-            skippedSkip = skippedSkip + 1
-        elseif cooldownBucket and not ns.isCool(cooldownBucket, fullName, opts.cooldownSeconds) then
-            skippedCool = skippedCool + 1
         else
-            eligible[#eligible + 1] = fullName
+            eligible[#eligible + 1] = batchByShort[short]
         end
     end
     -- Newest reply first, so a -N limit keeps the most recent repliers.
@@ -88,8 +73,6 @@ local function replyRecent(input)
 
     -- Counts behind the "N skipped" total, in the order the breakdown reads.
     local skipCounts = {
-        skiplist = skippedSkip,
-        cooldown = skippedCool,
         group = skippedGroup,
         limit = #eligible - sendCount,
     }
@@ -105,32 +88,20 @@ local function replyRecent(input)
     local skipped = replied - sendCount
 
     -- Fold the count, skip breakdown, and what the reply records into one line.
-    local function summarize(lead, isPreview)
+    local function summarize(lead)
         local line = lead .. " of " .. replied .. " who replied"
         if skipped > 0 then
             line = line .. ", " .. tint("skip", skipped .. " skipped")
             local why = ns.skipBreakdown(skipCounts)
             if why then line = line .. " (" .. why .. ")" end
         end
-        local applied = ns.appliedSummary(sendCount, skip ~= nil, cooldownMinutes, isPreview)
-        if applied then line = line .. ", " .. applied end
         return line
     end
 
-    if opts.preview then
-        status(summarize(tint("muted", "Preview.") .. " I'd reply to " .. sendCount, true)
-            .. ". " .. tint("muted", "Message:") .. " " .. opts.text)
-        return
-    end
-
     -- Summary first, so it leads the outgoing whisper lines.
-    status(summarize(tint("sent", "Replying to " .. sendCount), false) .. ".")
+    status(summarize(tint("sent", "Replying to " .. sendCount)) .. ".")
     for i = 1, sendCount do
-        local fullName = eligible[i]
-        ns.queueWhisper(opts.text, fullName)
-        if skip then skip[fullName] = true end
-        -- Only a timed -cd records new recipients; bare -cd just reads the pool.
-        if cooldownBucket and cooldownMinutes then cooldownBucket[fullName] = time() end
+        ns.queueWhisper(opts.text, eligible[i])
     end
 end
 

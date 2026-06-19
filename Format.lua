@@ -76,18 +76,16 @@ local function skipBreakdown(counts)
     return table.concat(parts, ", ")
 end
 
--- Inline summary of what a send recorded to the persistent lists (or would,
--- under -p). Returns a comma-joined fragment, or nil when neither -skip nor a
--- timed -cd applied, so the caller can append it to the one status line.
-local function appliedSummary(count, addedToSkip, cooldownMinutes, isPreview)
+-- Inline summary of what a send recorded to the persistent lists. Returns a
+-- comma-joined fragment, or nil when neither -skip nor a timed -cd applied, so
+-- the caller can append it to the one status line.
+local function appliedSummary(count, addedToSkip, cooldownMinutes)
     local parts = {}
     if addedToSkip then
-        local lead = isPreview and "would add " or "added "
-        parts[#parts + 1] = tint("skip", lead .. count .. " to skip list")
+        parts[#parts + 1] = tint("skip", "added " .. count .. " to skip list")
     end
     if cooldownMinutes then
-        local lead = isPreview and ("would put " .. count) or count
-        parts[#parts + 1] = tint("cool", lead .. " on cooldown for " .. cooldownMinutes .. " min")
+        parts[#parts + 1] = tint("cool", count .. " on cooldown for " .. cooldownMinutes .. " min")
     end
     if #parts == 0 then return nil end
     return table.concat(parts, ", ")

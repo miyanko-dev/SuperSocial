@@ -153,9 +153,6 @@ local function parseFlags(input)
         elseif flag == "-skip" then
             opts.useSkip = true
             cursor = cursor + 1
-        elseif flag == "-p" then
-            opts.preview = true
-            cursor = cursor + 1
         elseif (flag == "-not" or flag == "-only") and value then
             local bucket = (flag == "-only") and opts.includeTerms or opts.terms
             local raw = value
@@ -192,26 +189,29 @@ ns.loadCooldowns = loadCooldowns
 ns.pruneCooldowns = pruneCooldowns
 ns.isCool = isCool
 
-local function isFiltered(info, terms)
-    if #terms == 0 then return false end
+-- A term matches a player when it's a substring of their class or their zone,
+-- so "war" catches both Warriors and Warsong Gulch.
+local function matchesTerm(info, term)
     local class = (info.classStr or ""):lower()
     local area = (info.area or ""):lower()
+    if class ~= "" and class:find(term, 1, true) then return true end
+    if area ~= "" and area:find(term, 1, true) then return true end
+    return false
+end
+
+local function isFiltered(info, terms)
     for _, term in ipairs(terms) do
-        if term == class then return true end
-        if area ~= "" and area:find(term, 1, true) then return true end
+        if matchesTerm(info, term) then return true end
     end
     return false
 end
 
 -- -only is the inverse of -not: with terms set, a player must match at least
--- one (class exactly, or zone as a substring) to qualify. No terms = everyone.
+-- one term to qualify. No terms = everyone.
 local function isIncluded(info, includeTerms)
     if #includeTerms == 0 then return true end
-    local class = (info.classStr or ""):lower()
-    local area = (info.area or ""):lower()
     for _, term in ipairs(includeTerms) do
-        if term == class then return true end
-        if area ~= "" and area:find(term, 1, true) then return true end
+        if matchesTerm(info, term) then return true end
     end
     return false
 end
@@ -305,28 +305,22 @@ local function dispatchWho(opts)
     local skipped = count - sendCount
 
     -- Fold the count, skip breakdown, and list changes into one status line.
-    local function summarize(lead, isPreview)
+    local function summarize(lead)
         local line = lead .. " of " .. count .. " /who " .. plural(count, "result", "results")
         if skipped > 0 then
             line = line .. ", " .. tint("skip", skipped .. " skipped")
             local why = ns.skipBreakdown(skipCounts)
             if why then line = line .. " (" .. why .. ")" end
         end
-        local applied = ns.appliedSummary(sendCount, skip ~= nil, cooldownMinutes, isPreview)
+        local applied = ns.appliedSummary(sendCount, skip ~= nil, cooldownMinutes)
         if applied then line = line .. ", " .. applied end
         return line
-    end
-
-    if opts.preview then
-        status(summarize(tint("muted", "Preview.") .. " I'd whisper " .. sendCount, true)
-            .. ". " .. tint("muted", "Message:") .. " " .. opts.text)
-        return
     end
 
     -- Summary first, so it leads the outgoing whisper lines; the queue then
     -- trickles them out under the chat throttle.
     local function send()
-        status(summarize(tint("sent", "Whispering " .. sendCount), false) .. ".")
+        status(summarize(tint("sent", "Whispering " .. sendCount)) .. ".")
         local sentNames = {}
         for i = 1, sendCount do
             local fullName = eligible[i]
@@ -372,11 +366,6 @@ end
 
 local function whisperSellers(input)
     input = trim(input)
-    local preview = false
-    if input == "-p" or input:match("^%-p%s") then
-        preview = true
-        input = trim(input:gsub("^%-p", "", 1))
-    end
     local text = input
     if text == "" then
         status(tint("muted", "Usage:") .. " /ws MESSAGE — whisper every seller in the auction house Browse tab. "
@@ -390,11 +379,6 @@ local function whisperSellers(input)
     local names = collectAuctionSellers()
     if not names or #names == 0 then
         status(tint("skip", "No sellers") .. " in the current Browse results.")
-        return
-    end
-    if preview then
-        status(tint("muted", "Preview.") .. " I'd whisper " .. #names .. " auction " .. plural(#names, "seller", "sellers")
-            .. ". " .. tint("muted", "Message:") .. " " .. text)
         return
     end
     local function send()

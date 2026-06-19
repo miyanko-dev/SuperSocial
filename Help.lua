@@ -38,12 +38,6 @@ local COMMANDS = {
 
 local OPTIONS = {
     {
-        cmd = "-p",
-        on = "/ww, /ws, /rr",
-        desc = "Preview only — show how many you'd whisper and the message, but send nothing.",
-        eg = "/ww -p LFM SM live",
-    },
-    {
         cmd = "-N",
         on = "/ww, /rr",
         desc = "Whisper only the first N recipients.",
@@ -52,7 +46,7 @@ local OPTIONS = {
     {
         cmd = "-not",
         on = "/ww",
-        desc = "Skip a class (Warrior, Mage, …) or a zone (substring match). Separate several with commas.",
+        desc = "Skip anyone whose class or zone contains the word (Warrior, Maraudon, …). Separate several with commas.",
         eg = "/ww -not Warlock, Maraudon LFM healer",
     },
     {
@@ -63,19 +57,19 @@ local OPTIONS = {
     },
     {
         cmd = "-skip",
-        on = "/ww, /wt, /rr",
+        on = "/ww, /wt",
         desc = "Skip anyone on the skip list, then add the people you whisper to it. Survives reloads.",
         eg = "/ww -skip WTS enchant mats, whisper me",
     },
     {
         cmd = "-cd M",
-        on = "/ww, /rr",
+        on = "/ww",
         desc = "Skip anyone whispered in the last M minutes, then put new recipients on an M-minute cooldown.",
         eg = "/ww -cd 30 WTB Black Lotus, paying 80g",
     },
     {
         cmd = "-cd",
-        on = "/ww, /rr",
+        on = "/ww",
         desc = "With no number, skip anyone already cooling down without recording the people you whisper.",
         eg = "/ww -cd LFM SM live, need 1 tank",
     },
