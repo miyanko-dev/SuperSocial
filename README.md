@@ -23,21 +23,29 @@ Use any, all, or none — they compose in any order.
 ### Limit the count
 
 ```
-/ww -10 LFM SM live
+/ww -limit 10 LFM SM live
 ```
 
-Whispers only the first 10 people from your `/who` results. The same `-N` works on `/rr`.
+Whispers only the first 10 people from your `/who` results. The same `-limit` works on `/rr` and `/ws`.
 
 ### Skip a class or zone
 
 ```
-/ww -not Warlock LFM tank for SM
-/ww -not Maraudon WTS Black Lotus 50g
-/ww -not Warlock,Maraudon LFM healer
-/ww -not Maraudon, Warlock LFM healer
+/ww -skip Warlock LFM tank for SM
+/ww -skip Maraudon WTS Black Lotus 50g
+/ww -skip Warlock,Maraudon LFM healer
+/ww -skip Maraudon, Warlock LFM healer
 ```
 
-`-not` skips anyone whose class **or** zone contains the word: `-not war` drops Warriors and anyone in Warsong Gulch. Both are substring matches (class examples: Warrior, Mage, Warlock; zone examples: Maraudon, Stormwind). Separate multiple with commas — spaces around the commas are fine (`Warlock,Maraudon` and `Warlock, Maraudon` both work). Note that a trailing comma means "another term follows", so the next word is read as a filter rather than part of your message.
+`-skip` skips anyone whose class **or** zone contains the word: `-skip war` drops Warriors and anyone in Warsong Gulch. Both are substring matches (class examples: Warrior, Mage, Warlock; zone examples: Maraudon, Stormwind). Separate multiple with commas — spaces around the commas are fine (`Warlock,Maraudon` and `Warlock, Maraudon` both work). Note that a trailing comma means "another term follows", so the next word is read as a filter rather than part of your message.
+
+### Skip everyone already in an instance
+
+```
+/ww -skip instance LFM tank for SM
+```
+
+`instance` is a shorthand that expands to every classic dungeon and raid name (Ragefire Chasm through Naxxramas), so anyone already inside an instance is skipped — handy when recruiting, since those people can't join you anyway. It works inside `-only` too (`-only instance` whispers only people currently in one) and mixes with other terms (`-skip instance, Warlock`). Battlegrounds aren't included.
 
 ### Whisper only certain classes or zones
 
@@ -46,17 +54,17 @@ Whispers only the first 10 people from your `/who` results. The same `-N` works 
 /ww -only Mage WTS portals to any major city
 ```
 
-`-only` is the inverse of `-not`: it whispers **only** people whose class or zone contains the word, dropping everyone else. Same comma rules as `-not`. Combine the two to include a class but drop a zone (`-not Maraudon -only Priest`); when a player matches both, `-not` wins and they're skipped.
+`-only` is the inverse of `-skip`: it whispers **only** people whose class or zone contains the word, dropping everyone else. Same comma rules as `-skip`. Combine the two to include a class but drop a zone (`-skip Maraudon -only Priest`); when a player matches both, `-skip` wins and they're skipped.
 
 ### Don't whisper the same people twice
 
 ```
-/ww -skip Selling enchant mats, whisper for list
+/ww -ignore Selling enchant mats, whisper for list
 ```
 
-`-skip` whispers everyone, then **remembers** each recipient. Run `/ww -skip` again and those people are skipped. The list survives reloads. Clear it with `/wta clear skip`.
+`-ignore` whispers everyone, then **remembers** each recipient. Run `/ww -ignore` again and those people are skipped. The list survives reloads. Clear it with `/wta clear`.
 
-Use `-skip` when you're pitching the same thing over a long session and want to make sure nobody hears it twice.
+Use `-ignore` when you're pitching the same thing over a long session and want to make sure nobody hears it twice.
 
 ### Cool off recipients for a while
 
@@ -81,7 +89,7 @@ Leaving `-cd` off entirely ignores the cooldown list completely: everyone in you
 ### Combine freely
 
 ```
-/ww -20 -not Warlock -cd 15 LFM SM live, need 1 tank
+/ww -limit 20 -skip Warlock -cd 15 LFM SM live, need 1 tank
 ```
 
 Up to 20 non-warlocks, on a 15-minute cooldown. Order doesn't matter.
@@ -91,13 +99,13 @@ Up to 20 non-warlocks, on a 15-minute cooldown. Order doesn't matter.
 | Command | What it does |
 |---|---|
 | `/wt MESSAGE` | Whisper your current target. |
-| `/wt -skip MESSAGE` | Whisper your target and add them to the skip list. |
-| `/ws MESSAGE` | Whisper every seller in the auction house Browse tab. |
-| `/rr MESSAGE` | Reply to everyone from your last `/ww` who has whispered you back (minus your party and raid). Each `/ww` starts a fresh batch, so `/rr` always targets the latest blast. Takes `-N` (caps to the most recent repliers). |
+| `/wt -ignore MESSAGE` | Whisper your target and add them to the ignore list. |
+| `/ws MESSAGE` | Whisper every seller in the auction house Browse tab. Takes `-limit N`, `-cd M`, and `-ignore` (sellers carry no class or zone, so `-skip`/`-only` don't apply). |
+| `/rr MESSAGE` | Reply to everyone from your last `/ww` who has whispered you back (minus your party and raid). Each `/ww` starts a fresh batch, so `/rr` always targets the latest blast. Takes `-limit N` (caps to the most recent repliers). |
 | `/rr reset` or `/rr clear` | Forget the current batch and its replies. The batch isn't saved, so a `/reload`, re-login, or the next `/ww` resets it too. |
 | `/wta` | Open the command and parameter reference window. |
 | `/wta stop` | Cancel any whispers still queued to send (reports how many went out and how many were cancelled). |
-| `/wta reset` or `/wta clear` | Empty the skip list. |
+| `/wta reset` or `/wta clear` | Empty the ignore list. |
 | `/wta clear cd` | Empty the cooldown history. |
 | `/wta clear all` | Empty both. |
 

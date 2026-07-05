@@ -5,9 +5,13 @@ local _, ns = ...
 
 local tint = ns.tint
 
--- Each entry is a command or option with what it does and a worked example.
--- "cmd" is the short label shown in the left column; the example carries the
--- full usage so the column stays narrow and scannable.
+-- The window is three sections: the slash commands, the /wta management
+-- subcommands, then the flags that refine /ww. "cmd" is the short left-column
+-- label; "eg" carries the full worked example so the column stays scannable.
+local INTRO =
+    "Run /who, then /ww whispers everyone in the results — that's the core idea. "
+    .. "The flags below refine who hears it, and they stack in any order."
+
 local COMMANDS = {
     {
         cmd = "/ww",
@@ -16,7 +20,7 @@ local COMMANDS = {
     },
     {
         cmd = "/wt",
-        desc = "Whisper your current target.",
+        desc = "Whisper your current target (a player you have selected).",
         eg = "/wt got room for one more?",
     },
     {
@@ -31,59 +35,101 @@ local COMMANDS = {
     },
     {
         cmd = "/wta",
-        desc = "Open this window. Add stop, reset, clear cd, or clear all to manage queued whispers and saved lists.",
-        eg = "/wta stop",
+        desc = "Open this reference window.",
+        eg = "/wta",
     },
 }
 
-local OPTIONS = {
+-- Management subcommands: the label is the whole command, so these rows carry
+-- no separate example.
+local MANAGE = {
     {
-        cmd = "-N",
-        on = "/ww, /rr",
-        desc = "Whisper only the first N recipients.",
-        eg = "/ww -10 LFM SM live",
+        cmd = "/wta stop",
+        desc = "Cancel any whispers still queued to send.",
     },
     {
-        cmd = "-not",
+        cmd = "/wta clear",
+        desc = "Empty the ignore list (/wta reset does the same).",
+    },
+    {
+        cmd = "/wta clear cd",
+        desc = "Empty the cooldown history.",
+    },
+    {
+        cmd = "/wta clear all",
+        desc = "Empty both the ignore list and the cooldown history.",
+    },
+}
+
+local FLAGS = {
+    {
+        cmd = "-limit N",
+        on = "/ww, /rr, /ws",
+        desc = "Whisper only the first N recipients.",
+        eg = "/ww -limit 10 LFM SM live",
+    },
+    {
+        cmd = "-skip",
         on = "/ww",
         desc = "Skip anyone whose class or zone contains the word (Warrior, Maraudon, …). Separate several with commas.",
-        eg = "/ww -not Warlock, Maraudon LFM healer",
+        eg = "/ww -skip Warlock, Maraudon LFM healer",
     },
     {
         cmd = "-only",
         on = "/ww",
-        desc = "The inverse of -not: whisper only players matching a class or zone. Separate several with commas.",
+        desc = "The inverse of -skip: whisper only players matching a class or zone. Separate several with commas.",
         eg = "/ww -only Priest, Paladin LFM healer",
     },
     {
-        cmd = "-skip",
-        on = "/ww, /wt",
-        desc = "Skip anyone on the skip list, then add the people you whisper to it. Survives reloads.",
-        eg = "/ww -skip WTS enchant mats, whisper me",
+        cmd = "instance",
+        on = "-skip, -only",
+        desc = "A keyword that expands to every dungeon and raid name, so -skip instance skips anyone already inside one.",
+        eg = "/ww -skip instance LFM tank for SM",
+    },
+    {
+        cmd = "-ignore",
+        on = "/ww, /wt, /ws",
+        desc = "Skip anyone on the ignore list, then add the people you whisper to it. Survives reloads; clear with /wta clear.",
+        eg = "/ww -ignore WTS enchant mats, whisper me",
     },
     {
         cmd = "-cd M",
-        on = "/ww",
+        on = "/ww, /ws",
         desc = "Skip anyone whispered in the last M minutes, then put new recipients on an M-minute cooldown.",
         eg = "/ww -cd 30 WTB Black Lotus, paying 80g",
     },
     {
         cmd = "-cd",
-        on = "/ww",
+        on = "/ww, /ws",
         desc = "With no number, skip anyone already cooling down without recording the people you whisper.",
         eg = "/ww -cd LFM SM live, need 1 tank",
     },
 }
 
+local FOOTER =
+    "Stack flags freely: /ww -limit 20 -skip instance -cd 30 LFM tank for SM "
+    .. "whispers up to 20 people, skips anyone already in an instance, and won't repeat within 30 minutes."
+
 -- Lay the entries out as a two-column table: gold label on the left, white
--- description with an amber example beneath on the right. Each section gets a
--- larger heading. Returns the total content height.
+-- description with an amber example beneath on the right. Full-width notes lead
+-- and close the page, and each section gets a larger heading. Returns the total
+-- content height.
 local function layoutContent(content, width)
     local LEFT, RIGHT = 16, 10
-    local LABEL_WIDTH, COLUMN_GAP = 92, 14
+    local LABEL_WIDTH, COLUMN_GAP = 104, 14
     local bodyLeft = LEFT + LABEL_WIDTH + COLUMN_GAP
     local bodyWidth = width - bodyLeft - RIGHT
     local y = 12
+
+    local function addNote(text)
+        local note = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+        note:SetPoint("TOPLEFT", LEFT, -y)
+        note:SetWidth(width - LEFT - RIGHT)
+        note:SetJustifyH("LEFT")
+        note:SetSpacing(2)
+        note:SetText(text)
+        y = y + note:GetStringHeight() + 12
+    end
 
     local function addHeader(text)
         y = y + 8
@@ -114,16 +160,26 @@ local function layoutContent(content, width)
         return tint("muted", "e.g.  ") .. tint("cool", text)
     end
 
+    addNote(INTRO)
+
     addHeader("Commands")
     for _, entry in ipairs(COMMANDS) do
         addRow(entry.cmd, entry.desc .. "\n" .. exampleLine(entry.eg))
     end
 
-    addHeader("Options")
-    for _, entry in ipairs(OPTIONS) do
+    addHeader("Manage")
+    for _, entry in ipairs(MANAGE) do
+        addRow(entry.cmd, entry.desc)
+    end
+
+    addHeader("Flags")
+    for _, entry in ipairs(FLAGS) do
         local desc = entry.desc .. "  " .. tint("muted", "(" .. entry.on .. ")")
         addRow(entry.cmd, desc .. "\n" .. exampleLine(entry.eg))
     end
+
+    addHeader("Combine them")
+    addNote(FOOTER)
 
     return y + 8
 end

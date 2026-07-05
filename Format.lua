@@ -67,7 +67,7 @@ local function skipBreakdown(counts)
             parts[#parts + 1] = head .. " " .. label
         end
     end
-    add(counts.skiplist, "skip", "on the skip list")
+    add(counts.skiplist, "skip", "on the ignore list")
     add(counts.cooldown, "cool", "on cooldown")
     add(counts.filter, nil, "filtered out")
     add(counts.group, nil, "in your group")
@@ -77,12 +77,12 @@ local function skipBreakdown(counts)
 end
 
 -- Inline summary of what a send recorded to the persistent lists. Returns a
--- comma-joined fragment, or nil when neither -skip nor a timed -cd applied, so
+-- comma-joined fragment, or nil when neither -ignore nor a timed -cd applied, so
 -- the caller can append it to the one status line.
 local function appliedSummary(count, addedToSkip, cooldownMinutes)
     local parts = {}
     if addedToSkip then
-        parts[#parts + 1] = tint("skip", "added " .. count .. " to skip list")
+        parts[#parts + 1] = tint("skip", "added " .. count .. " to ignore list")
     end
     if cooldownMinutes then
         parts[#parts + 1] = tint("cool", count .. " on cooldown for " .. cooldownMinutes .. " min")

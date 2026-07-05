@@ -33,6 +33,10 @@ local function replyRecent(input)
     end
 
     local opts = ns.parseFlags(input)
+    if opts.limitError then
+        status(tint("skip", "-limit needs a number.") .. " " .. tint("muted", "e.g.") .. " " .. tint("cool", "/rr -limit 5 invite incoming") .. ".")
+        return
+    end
     if not opts.text or opts.text == "" then
         status(tint("muted", "Usage:") .. " /rr MESSAGE — reply to everyone from your last /ww who whispered back. "
             .. tint("muted", "e.g.") .. " " .. tint("cool", "/rr invite incoming!") .. ".")
@@ -64,7 +68,7 @@ local function replyRecent(input)
             eligible[#eligible + 1] = batchByShort[short]
         end
     end
-    -- Newest reply first, so a -N limit keeps the most recent repliers.
+    -- Newest reply first, so a -limit keeps the most recent repliers.
     table.sort(eligible, function(a, b)
         return batchRepliedAt[ns.nameOnly(a)] > batchRepliedAt[ns.nameOnly(b)]
     end)
