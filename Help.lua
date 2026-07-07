@@ -30,7 +30,7 @@ local COMMANDS = {
     },
     {
         cmd = "/rr",
-        desc = "Reply to everyone from your last /ww who whispered you back. Each /ww starts a fresh batch.",
+        desc = "Reply to everyone whispered via /ww who whispered back and hasn't been answered yet.",
         eg = "/rr invite incoming, whisper me",
     },
     {
@@ -81,12 +81,6 @@ local FLAGS = {
         eg = "/ww -only Priest, Paladin LFM healer",
     },
     {
-        cmd = "instance",
-        on = "-skip, -only",
-        desc = "A keyword that expands to every dungeon and raid name, so -skip instance skips anyone already inside one.",
-        eg = "/ww -skip instance LFM tank for SM",
-    },
-    {
         cmd = "-ignore",
         on = "/ww, /wt, /ws",
         desc = "Skip anyone on the ignore list, then add the people you whisper to it. Survives reloads; clear with /wta clear.",
@@ -104,11 +98,17 @@ local FLAGS = {
         desc = "With no number, skip anyone already cooling down without recording the people you whisper.",
         eg = "/ww -cd LFM SM live, need 1 tank",
     },
+    {
+        cmd = "-wait",
+        on = "/ww",
+        desc = "Hold the whisper until fresh /who results arrive. Lets one macro run /who then /ww in a single click.",
+        eg = "/ww -wait -limit 20 WTB Black Lotus",
+    },
 }
 
 local FOOTER =
-    "Stack flags freely: /ww -limit 20 -skip instance -cd 30 LFM tank for SM "
-    .. "whispers up to 20 people, skips anyone already in an instance, and won't repeat within 30 minutes."
+    "Stack flags freely: /ww -limit 20 -skip Maraudon -cd 30 LFM tank for SM "
+    .. "whispers up to 20 people, skips anyone in Maraudon, and won't repeat within 30 minutes."
 
 -- Lay the entries out as a two-column table: gold label on the left, white
 -- description with an amber example beneath on the right. Full-width notes lead

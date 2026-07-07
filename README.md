@@ -16,7 +16,7 @@ You'll never whisper yourself or anyone in your party or raid.
 
 If a single `/ww` or `/ws` run would whisper more than 20 people, you'll get a confirmation prompt first so a near-full list can't go out by accident.
 
-## Six optional extras for /ww
+## Five optional extras for /ww
 
 Use any, all, or none — they compose in any order.
 
@@ -38,14 +38,6 @@ Whispers only the first 10 people from your `/who` results. The same `-limit` wo
 ```
 
 `-skip` skips anyone whose class **or** zone contains the word: `-skip war` drops Warriors and anyone in Warsong Gulch. Both are substring matches (class examples: Warrior, Mage, Warlock; zone examples: Maraudon, Stormwind). Separate multiple with commas — spaces around the commas are fine (`Warlock,Maraudon` and `Warlock, Maraudon` both work). Note that a trailing comma means "another term follows", so the next word is read as a filter rather than part of your message.
-
-### Skip everyone already in an instance
-
-```
-/ww -skip instance LFM tank for SM
-```
-
-`instance` is a shorthand that expands to every classic dungeon and raid name (Ragefire Chasm through Naxxramas), so anyone already inside an instance is skipped — handy when recruiting, since those people can't join you anyway. It works inside `-only` too (`-only instance` whispers only people currently in one) and mixes with other terms (`-skip instance, Warlock`). Battlegrounds aren't included.
 
 ### Whisper only certain classes or zones
 
@@ -72,7 +64,7 @@ Use `-ignore` when you're pitching the same thing over a long session and want t
 /ww -cd 30 WTB Black Lotus, paying 80g
 ```
 
-`-cd 30` whispers everyone, then puts each recipient on a 30-minute cooldown. Run `/ww -cd 30` again within that window and the people you just whispered are skipped. Cooldowns age out on their own. Clear early with `/wta clear cd`.
+`-cd 30` whispers everyone, then puts each recipient on a 30-minute cooldown. Run `/ww -cd 30` again within that window and the people you just whispered are skipped. The cooldown list is account-wide and survives reloads and relogs, so it keeps working across your characters. Cooldowns age out on their own. Clear early with `/wta clear cd`.
 
 Use `-cd 30` when you'll repeat the same broadcast every few minutes.
 
@@ -101,8 +93,8 @@ Up to 20 non-warlocks, on a 15-minute cooldown. Order doesn't matter.
 | `/wt MESSAGE` | Whisper your current target. |
 | `/wt -ignore MESSAGE` | Whisper your target and add them to the ignore list. |
 | `/ws MESSAGE` | Whisper every seller in the auction house Browse tab. Takes `-limit N`, `-cd M`, and `-ignore` (sellers carry no class or zone, so `-skip`/`-only` don't apply). |
-| `/rr MESSAGE` | Reply to everyone from your last `/ww` who has whispered you back (minus your party and raid). Each `/ww` starts a fresh batch, so `/rr` always targets the latest blast. Takes `-limit N` (caps to the most recent repliers). |
-| `/rr reset` or `/rr clear` | Forget the current batch and its replies. The batch isn't saved, so a `/reload`, re-login, or the next `/ww` resets it too. |
+| `/rr MESSAGE` | Reply to everyone whispered via `/ww` who has whispered you back and hasn't been answered yet (minus your party and raid). Recipients accumulate across `/ww` runs, and any reply — an earlier `/rr` or a manual whisper — counts as answered, so run several `/ww` queries, then one `/rr` handles them all without whispering anyone twice. People `/rr` has answered stay excluded even if they whisper again; only a fresh `/ww` that includes them starts a new exchange. Takes `-limit N` (caps to the most recent repliers). |
+| `/rr reset` or `/rr clear` | Forget all tracked `/ww` recipients and their replies. Tracking isn't saved, so a `/reload` or re-login clears it too. |
 | `/wta` | Open the command and parameter reference window. |
 | `/wta stop` | Cancel any whispers still queued to send (reports how many went out and how many were cancelled). |
 | `/wta reset` or `/wta clear` | Empty the ignore list. |

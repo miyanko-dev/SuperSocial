@@ -11,10 +11,6 @@ local function trim(s)
     return (s or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
-local function playerKey()
-    return (UnitName("player") or "?") .. "-" .. (GetRealmName() or "?")
-end
-
 local function loadSkip()
     WhisperThemAllDB = WhisperThemAllDB or {}
 
@@ -49,10 +45,24 @@ end
 
 local function loadCooldowns()
     WhisperThemAllDB = WhisperThemAllDB or {}
-    WhisperThemAllDB.cooldownByChar = WhisperThemAllDB.cooldownByChar or {}
-    local key = playerKey()
-    local bucket = WhisperThemAllDB.cooldownByChar[key] or {}
-    WhisperThemAllDB.cooldownByChar[key] = bucket
+
+    -- One account-wide cooldown list shared by every character, like the
+    -- ignore list — a relog onto an alt keeps everyone's cooldown running.
+    local bucket = WhisperThemAllDB.cooldownAccount or {}
+    WhisperThemAllDB.cooldownAccount = bucket
+
+    -- Migrate per-character buckets, keeping the newest timestamp per name.
+    if WhisperThemAllDB.cooldownByChar then
+        for _, charBucket in pairs(WhisperThemAllDB.cooldownByChar) do
+            for name, ts in pairs(charBucket) do
+                if not bucket[name] or ts > bucket[name] then
+                    bucket[name] = ts
+                end
+            end
+        end
+        WhisperThemAllDB.cooldownByChar = nil
+    end
+
     return bucket
 end
 
@@ -130,19 +140,6 @@ local function whisperTarget(input)
     if useSkip then loadSkip()[targetName] = true end
 end
 
--- "instance" inside -skip or -only expands to these, so one word covers anyone
--- already inside a dungeon or raid. Distinctive substrings of the English
--- zone names; "ahn'qiraj" catches both the Ruins and the Temple.
-local INSTANCE_TERMS = {
-    "ragefire chasm", "wailing caverns", "deadmines", "shadowfang keep",
-    "stockade", "blackfathom deeps", "gnomeregan", "razorfen kraul",
-    "scarlet monastery", "razorfen downs", "uldaman", "zul'farrak",
-    "maraudon", "atal'hakkar", "blackrock depths", "blackrock spire",
-    "dire maul", "scholomance", "stratholme",
-    "molten core", "onyxia's lair", "blackwing lair", "zul'gurub",
-    "ahn'qiraj", "naxxramas",
-}
-
 local function parseFlags(input)
     local tokens = {}
     for t in input:gmatch("%S+") do tokens[#tokens + 1] = t end
@@ -174,6 +171,9 @@ local function parseFlags(input)
         elseif flag == "-ignore" then
             opts.useSkip = true
             cursor = cursor + 1
+        elseif flag == "-wait" then
+            opts.wait = true
+            cursor = cursor + 1
         elseif (flag == "-skip" or flag == "-only") and value then
             local bucket = (flag == "-only") and opts.includeTerms or opts.terms
             local raw = value
@@ -188,11 +188,7 @@ local function parseFlags(input)
             end
             for term in raw:gmatch("[^,]+") do
                 local cleaned = trim(term):lower()
-                if cleaned == "instance" then
-                    for _, zone in ipairs(INSTANCE_TERMS) do
-                        bucket[#bucket + 1] = zone
-                    end
-                elseif cleaned ~= "" then
+                if cleaned ~= "" then
                     bucket[#bucket + 1] = cleaned
                 end
             end
@@ -206,8 +202,8 @@ local function parseFlags(input)
     return opts
 end
 
--- Shared with /rr so both commands parse flags and honour the same ignore list
--- and cooldown pool identically.
+-- Shared with /rr so both commands parse flags the same way; /rr only acts
+-- on -limit and rejects -cd.
 ns.parseFlags = parseFlags
 ns.loadSkip = loadSkip
 ns.loadCooldowns = loadCooldowns
@@ -355,11 +351,34 @@ local function dispatchWho(opts)
             -- Only a timed -cd records new recipients; bare -cd just reads the list.
             if cooldownBucket and cooldownMinutes then cooldownBucket[fullName] = time() end
         end
-        -- This blast becomes the /rr batch: replies from these names feed /rr.
-        ns.beginReplyBatch(sentNames)
+        -- /rr replies to these names once they whisper back.
+        ns.trackWhispered(sentNames)
     end
 
     confirmLargeSend(sendCount, send)
+end
+
+-- -wait lets a one-click macro send /who then /ww: we hold the whisper until the
+-- next WHO_LIST_UPDATE brings the fresh results, with a timeout so a dropped
+-- update never leaves the command hanging.
+local function waitForWho(opts)
+    local waiter = CreateFrame("Frame")
+    local done = false
+    local function finish()
+        if done then return end
+        done = true
+        waiter:UnregisterEvent("WHO_LIST_UPDATE")
+        waiter:SetScript("OnEvent", nil)
+        dispatchWho(opts)
+    end
+    waiter:RegisterEvent("WHO_LIST_UPDATE")
+    -- A /who fires WHO_LIST_UPDATE twice: once to clear the old rows (still 0),
+    -- then again when the server's results land. Wait for the one with results.
+    waiter:SetScript("OnEvent", function()
+        if C_FriendList.GetNumWhoResults() > 0 then finish() end
+    end)
+    -- Fallback: if nothing ever arrives, dispatch anyway so the command can't hang.
+    C_Timer.After(5, finish)
 end
 
 local function whisperWho(input)
@@ -373,7 +392,11 @@ local function whisperWho(input)
             .. tint("muted", "e.g.") .. " " .. tint("cool", "/ww LFM SM live") .. ".  Type /wta for all options.")
         return
     end
-    dispatchWho(opts)
+    if opts.wait then
+        waitForWho(opts)
+    else
+        dispatchWho(opts)
+    end
 end
 
 local function collectAuctionSellers()
