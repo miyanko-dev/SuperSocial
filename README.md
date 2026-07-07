@@ -16,7 +16,7 @@ You'll never whisper yourself or anyone in your party or raid.
 
 If a single `/ww` or `/ws` run would whisper more than 20 people, you'll get a confirmation prompt first so a near-full list can't go out by accident.
 
-## Five optional extras for /ww
+## Six optional extras for /ww
 
 Use any, all, or none — they compose in any order.
 
@@ -77,6 +77,22 @@ Use `-cd 30` when you'll repeat the same broadcast every few minutes.
 It skips anyone **already** on the cooldown list but does **not** add the people it whispers. Use it to honour an existing cooldown for a one-off message without resetting everyone's timer — for example, a quick follow-up between your timed `-cd 30` broadcasts.
 
 Leaving `-cd` off entirely ignores the cooldown list completely: everyone in your `/who` results gets whispered and nobody is recorded.
+
+### Run /who and /ww in one click
+
+Normally you type `/who`, wait for the results, then `/ww`. `-wait` lets a single macro do both: it holds the whisper until the fresh `/who` results arrive, then sends. Put the `/who` on the first line and `/ww -wait` on the second:
+
+```
+/who 25-30
+/ww -wait LFM SM live, need a tank
+```
+
+Only useful in a macro alongside a `/who` — on its own it just waits for the next search. Great for pairing a targeted search with a broadcast, e.g. a zone-and-class `/who`:
+
+```
+/run C_FriendList.SendWho('z-"'..GetZoneText()..'" 60 c-Mage')
+/ww -wait -limit 20 Got any spare food and water to share?
+```
 
 ### Combine freely
 
