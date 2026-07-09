@@ -14,8 +14,6 @@ Run a `/who` search, then `/ww MESSAGE` whispers everyone in the results. That's
 
 You'll never whisper yourself or anyone in your party or raid.
 
-If a single `/ww` or `/ws` run would whisper more than 20 people, you'll get a confirmation prompt first so a near-full list can't go out by accident.
-
 ## Six optional extras for /ww
 
 Use any, all, or none — they compose in any order.
@@ -109,13 +107,16 @@ Up to 20 non-warlocks, on a 15-minute cooldown. Order doesn't matter.
 | `/wt MESSAGE` | Whisper your current target. |
 | `/wt -ignore MESSAGE` | Whisper your target and add them to the ignore list. |
 | `/ws MESSAGE` | Whisper every seller in the auction house Browse tab. Takes `-limit N`, `-cd M`, and `-ignore` (sellers carry no class or zone, so `-skip`/`-only` don't apply). |
-| `/rr MESSAGE` | Reply to everyone whispered via `/ww` who has whispered you back and hasn't been answered yet (minus your party and raid). Recipients accumulate across `/ww` runs, and any reply — an earlier `/rr` or a manual whisper — counts as answered, so run several `/ww` queries, then one `/rr` handles them all without whispering anyone twice. People `/rr` has answered stay excluded even if they whisper again; only a fresh `/ww` that includes them starts a new exchange. Takes `-limit N` (caps to the most recent repliers). |
+| `/rr MESSAGE` | Reply to everyone whispered via `/ww` who has whispered you back and hasn't been answered yet (minus your party and raid). Recipients accumulate across `/ww` runs, and any reply — an earlier `/rr` or a manual whisper — counts as answered, so run several `/ww` queries, then one `/rr` handles them all without whispering anyone twice. People you've answered — via `/rr` or a manual whisper — stay excluded even if they whisper again; only a fresh `/ww` that includes them starts a new exchange. Takes `-limit N` (caps to the most recent repliers). |
 | `/rr reset` or `/rr clear` | Forget all tracked `/ww` recipients and their replies. Tracking isn't saved, so a `/reload` or re-login clears it too. |
 | `/wta` | Open the command and parameter reference window. |
 | `/wta stop` | Cancel any whispers still queued to send (reports how many went out and how many were cancelled). |
 | `/wta reset` or `/wta clear` | Empty the ignore list. |
 | `/wta clear cd` | Empty the cooldown history. |
 | `/wta clear all` | Empty both. |
+| `/wta block NAME` | Block a player permanently: no command ever whispers them. The list is account-wide, survives reloads, and isn't touched by `/wta clear`. |
+| `/wta block list` | Show everyone on the block list. |
+| `/wta unblock NAME` | Remove a player from the block list. |
 
 ## Throttling
 

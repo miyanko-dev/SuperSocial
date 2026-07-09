@@ -43,6 +43,16 @@ local function clearSkip()
     wipe(loadSkip())
 end
 
+local function loadBlocked()
+    WhisperThemAllDB = WhisperThemAllDB or {}
+
+    -- Permanent, account-wide block list: keys are lowercased names so lookups
+    -- ignore capitalization, values keep the name as shown in chat.
+    local bucket = WhisperThemAllDB.blockedAccount or {}
+    WhisperThemAllDB.blockedAccount = bucket
+    return bucket
+end
+
 local function loadCooldowns()
     WhisperThemAllDB = WhisperThemAllDB or {}
 
@@ -90,6 +100,13 @@ local function nameOnly(value)
     return value:match("^([^-]+)") or value
 end
 
+-- Matches both "Name" and "Name-Realm" forms against the lowercased keys.
+local function isBlocked(blocked, fullName)
+    if blocked[fullName:lower()] then return true end
+    local short = nameOnly(fullName)
+    return short ~= fullName and blocked[short:lower()] or false
+end
+
 local function buildGroupSet()
     local set = {}
     local me = UnitName("player")
@@ -135,6 +152,11 @@ local function whisperTarget(input)
     end
     local targetName = UnitName("target")
     local _, classFile = UnitClass("target")
+    if isBlocked(loadBlocked(), targetName) then
+        status(tint("skip", "Blocked.") .. " " .. className(targetName, classFile)
+            .. " is on the block list. " .. tint("muted", "/wta unblock " .. targetName) .. " removes them.")
+        return
+    end
     SendChatMessage(text, "WHISPER", nil, targetName)
     status(tint("sent", "Whispered") .. " " .. className(targetName, classFile) .. ".")
     if useSkip then loadSkip()[targetName] = true end
@@ -206,6 +228,8 @@ end
 -- on -limit and rejects -cd.
 ns.parseFlags = parseFlags
 ns.loadSkip = loadSkip
+ns.loadBlocked = loadBlocked
+ns.isBlocked = isBlocked
 ns.loadCooldowns = loadCooldowns
 ns.pruneCooldowns = pruneCooldowns
 ns.isCool = isCool
@@ -237,30 +261,6 @@ local function isIncluded(info, includeTerms)
     return false
 end
 
-local CONFIRM_THRESHOLD = 20
-
-StaticPopupDialogs["WHISPERTHEMALL_CONFIRM_SEND"] = {
-    text = "Whisper Them All: send to %d players?",
-    button1 = YES,
-    button2 = NO,
-    OnAccept = function(_, send) if send then send() end end,
-    timeout = 0,
-    whileDead = true,
-    hideOnEscape = true,
-    showAlert = true,
-    preferredIndex = 3,
-}
-
--- Big bulk sends ask first, so a near-full /who or Browse list can't go out by
--- accident. Smaller runs send straight away.
-local function confirmLargeSend(count, send)
-    if count <= CONFIRM_THRESHOLD then
-        send()
-    else
-        StaticPopup_Show("WHISPERTHEMALL_CONFIRM_SEND", count, nil, send)
-    end
-end
-
 local function dispatchWho(opts)
     local count = C_FriendList.GetNumWhoResults()
     if count == 0 then
@@ -269,6 +269,7 @@ local function dispatchWho(opts)
     end
 
     local groupSet = buildGroupSet()
+    local blocked = loadBlocked()
     local skip = opts.useSkip and loadSkip() or nil
     local cooldownBucket
     local cooldownMinutes
@@ -280,7 +281,7 @@ local function dispatchWho(opts)
         end
     end
 
-    local skippedGroup, skippedFilter, skippedSkip, skippedCool = 0, 0, 0, 0
+    local skippedGroup, skippedBlocked, skippedFilter, skippedSkip, skippedCool = 0, 0, 0, 0, 0
     local eligible = {}
     for i = 1, count do
         local info = C_FriendList.GetWhoInfo(i)
@@ -289,6 +290,8 @@ local function dispatchWho(opts)
             local short = nameOnly(fullName)
             if groupSet[short or fullName] then
                 skippedGroup = skippedGroup + 1
+            elseif isBlocked(blocked, fullName) then
+                skippedBlocked = skippedBlocked + 1
             elseif isFiltered(info, opts.terms) then
                 skippedFilter = skippedFilter + 1
             elseif not isIncluded(info, opts.includeTerms) then
@@ -308,6 +311,7 @@ local function dispatchWho(opts)
 
     -- Counts behind the "N skipped" total, in the order the breakdown reads.
     local skipCounts = {
+        blocked = skippedBlocked,
         skiplist = skippedSkip,
         cooldown = skippedCool,
         filter = skippedFilter,
@@ -355,7 +359,7 @@ local function dispatchWho(opts)
         ns.trackWhispered(sentNames)
     end
 
-    confirmLargeSend(sendCount, send)
+    send()
 end
 
 -- -wait lets a one-click macro send /who then /ww: we hold the whisper until the
@@ -442,6 +446,7 @@ local function whisperSellers(input)
         return
     end
 
+    local blocked = loadBlocked()
     local skip = opts.useSkip and loadSkip() or nil
     local cooldownBucket, cooldownMinutes
     if opts.useCooldown then
@@ -453,10 +458,12 @@ local function whisperSellers(input)
     end
 
     local total = #names
-    local skippedSkip, skippedCool = 0, 0
+    local skippedBlocked, skippedSkip, skippedCool = 0, 0, 0
     local eligible = {}
     for _, sellerName in ipairs(names) do
-        if skip and skip[sellerName] then
+        if isBlocked(blocked, sellerName) then
+            skippedBlocked = skippedBlocked + 1
+        elseif skip and skip[sellerName] then
             skippedSkip = skippedSkip + 1
         elseif cooldownBucket and not isCool(cooldownBucket, sellerName, opts.cooldownSeconds) then
             skippedCool = skippedCool + 1
@@ -469,6 +476,7 @@ local function whisperSellers(input)
     local sendCount = opts.limit and math.min(opts.limit, eligibleCount) or eligibleCount
 
     local skipCounts = {
+        blocked = skippedBlocked,
         skiplist = skippedSkip,
         cooldown = skippedCool,
         limit = eligibleCount - sendCount,
@@ -508,13 +516,72 @@ local function whisperSellers(input)
         end
     end
 
-    confirmLargeSend(sendCount, send)
+    send()
+end
+
+-- Display form with a leading capital, matching how names render in game.
+local function displayName(name)
+    return name:sub(1, 1):upper() .. name:sub(2)
+end
+
+local function listBlocked()
+    local names = {}
+    for _, shown in pairs(loadBlocked()) do
+        names[#names + 1] = shown
+    end
+    if #names == 0 then
+        status("Block list is empty. " .. tint("muted", "/wta block NAME") .. " adds someone.")
+        return
+    end
+    table.sort(names)
+    for i, name in ipairs(names) do
+        names[i] = tint("name", name)
+    end
+    status(#names .. " blocked: " .. table.concat(names, ", ") .. ".")
+end
+
+local function blockName(name)
+    if name:find("%s") then
+        status(tint("skip", "One name at a time.") .. " " .. tint("muted", "e.g.") .. " " .. tint("cool", "/wta block Thrall") .. ".")
+        return
+    end
+    local blocked = loadBlocked()
+    local key = name:lower()
+    if blocked[key] then
+        status(tint("name", blocked[key]) .. " is already blocked.")
+        return
+    end
+    blocked[key] = displayName(name)
+    status(tint("skip", "Blocked") .. " " .. tint("name", blocked[key])
+        .. ". No command will whisper them. " .. tint("muted", "/wta unblock " .. blocked[key]) .. " undoes it.")
+end
+
+local function unblockName(name)
+    local blocked = loadBlocked()
+    local key = name:lower()
+    local shown = blocked[key]
+    if not shown then
+        status(tint("name", displayName(name)) .. " isn't on the block list.")
+        return
+    end
+    blocked[key] = nil
+    status("Unblocked " .. tint("name", shown) .. ".")
 end
 
 local function adminCommand(input)
-    input = trim(input):lower()
+    -- Keep the raw form so block/unblock names keep their capitalization.
+    local raw = trim(input)
+    input = raw:lower()
     if input == "" or input == "help" then
         ns.toggleHelp()
+    elseif input == "block" or input == "block list" then
+        listBlocked()
+    elseif input:match("^block%s") then
+        blockName(trim(raw:match("^%S+%s+(.*)$")))
+    elseif input == "unblock" then
+        status(tint("muted", "Usage:") .. " /wta unblock NAME — remove a player from the block list.")
+    elseif input:match("^unblock%s") then
+        unblockName(trim(raw:match("^%S+%s+(.*)$")))
     elseif input == "stop" then
         local sent, dropped = ns.cancelQueue()
         if sent == 0 and dropped == 0 then

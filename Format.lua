@@ -67,6 +67,7 @@ local function skipBreakdown(counts)
             parts[#parts + 1] = head .. " " .. label
         end
     end
+    add(counts.blocked, "skip", "blocked")
     add(counts.skiplist, "skip", "on the ignore list")
     add(counts.cooldown, "cool", "on cooldown")
     add(counts.filter, nil, "filtered out")

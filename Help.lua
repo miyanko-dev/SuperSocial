@@ -59,6 +59,18 @@ local MANAGE = {
         cmd = "/wta clear all",
         desc = "Empty both the ignore list and the cooldown history.",
     },
+    {
+        cmd = "/wta block NAME",
+        desc = "Block a player for good: no command ever whispers them. Account-wide; /wta clear leaves it alone.",
+    },
+    {
+        cmd = "/wta block list",
+        desc = "Show everyone on the block list.",
+    },
+    {
+        cmd = "/wta unblock NAME",
+        desc = "Remove a player from the block list.",
+    },
 }
 
 local FLAGS = {

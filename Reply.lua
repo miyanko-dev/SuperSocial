@@ -7,12 +7,23 @@ local plural = ns.plural
 -- /rr replies to everyone whispered via /ww who has whispered back and hasn't
 -- been answered yet. /ww recipients accumulate across blasts; the listener
 -- below marks their replies as pending and clears them again on any outgoing
--- whisper — an /rr, a manual reply, or the next /ww blast. People /rr has
--- answered stay answered even if they whisper again; only a fresh /ww that
+-- whisper. Personal answers — an /rr or a manual whisper — are sticky: further
+-- whispers from that person won't re-queue them. Only a fresh /ww that
 -- includes them starts a new exchange. Tracking is session-only.
 local whisperedByShort = {}  -- short name -> the full "Name-Realm" we whispered
 local pendingReplyAt = {}    -- short name -> time of their still-unanswered reply
-local answeredByShort = {}   -- short name -> true once /rr replied; a fresh /ww clears it
+local answeredByShort = {}   -- short name -> true once answered; a fresh /ww clears it
+
+-- Whispers the queue sends are blasts, not personal answers: the listener
+-- clears pending for them without turning sticky. Counted per name because
+-- back-to-back runs can queue the same person twice.
+local blastOutgoing = {}
+
+function ns.markBlastWhisper(fullName)
+    local short = ns.nameOnly(fullName)
+    if not short then return end
+    blastOutgoing[short] = (blastOutgoing[short] or 0) + 1
+end
 
 -- Called by /ww after a send: recipients accumulate across blasts. A fresh
 -- blast re-arms anyone /rr already answered — new solicitation, new exchange.
@@ -32,6 +43,7 @@ local function replyRecent(input)
         wipe(whisperedByShort)
         wipe(pendingReplyAt)
         wipe(answeredByShort)
+        wipe(blastOutgoing)
         status("Reply tracking reset. Run /ww, then /rr replies to whoever whispers back.")
         return
     end
@@ -66,12 +78,15 @@ local function replyRecent(input)
     end
 
     local groupSet = ns.buildGroupSet()
+    local blocked = ns.loadBlocked()
 
-    local skippedGroup = 0
+    local skippedGroup, skippedBlocked = 0, 0
     local eligible = {}
     for short in pairs(pendingReplyAt) do
         if groupSet[short] then
             skippedGroup = skippedGroup + 1
+        elseif ns.isBlocked(blocked, whisperedByShort[short]) then
+            skippedBlocked = skippedBlocked + 1
         else
             eligible[#eligible + 1] = whisperedByShort[short]
         end
@@ -85,6 +100,7 @@ local function replyRecent(input)
 
     -- Counts behind the "N skipped" total, in the order the breakdown reads.
     local skipCounts = {
+        blocked = skippedBlocked,
         group = skippedGroup,
         limit = #eligible - sendCount,
     }
@@ -126,8 +142,8 @@ local function replyRecent(input)
 end
 
 -- Track both directions for /ww recipients: an incoming whisper marks a
--- pending reply, any outgoing whisper to them counts as answered — whether
--- from /rr, a manual reply, or the next /ww blast.
+-- pending reply, any outgoing whisper to them clears it. Queued blasts stop
+-- there; a manual whisper also answers them for good, like an /rr reply.
 local listener = CreateFrame("Frame")
 listener:RegisterEvent("CHAT_MSG_WHISPER")
 listener:RegisterEvent("CHAT_MSG_WHISPER_INFORM")
@@ -135,12 +151,18 @@ listener:SetScript("OnEvent", function(_, event, _, otherParty)
     local short = ns.nameOnly(otherParty)
     if not (short and whisperedByShort[short]) then return end
     if event == "CHAT_MSG_WHISPER" then
-        -- Once /rr answered them, follow-up whispers don't re-queue them.
+        -- Once answered, follow-up whispers don't re-queue them.
         if not answeredByShort[short] then
             pendingReplyAt[short] = time()
         end
     else
         pendingReplyAt[short] = nil
+        local blasts = blastOutgoing[short]
+        if blasts then
+            blastOutgoing[short] = blasts > 1 and blasts - 1 or nil
+        else
+            answeredByShort[short] = true
+        end
     end
 end)
 

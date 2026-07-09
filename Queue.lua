@@ -21,6 +21,9 @@ local function sendNext()
         finish()
         return
     end
+    -- Flag the send as a blast so the reply tracker won't mistake its INFORM
+    -- event for a personal answer.
+    ns.markBlastWhisper(item.target)
     SendChatMessage(item.text, "WHISPER", nil, item.target)
     sent = sent + 1
 end
