@@ -5,7 +5,6 @@ local applyingColor = false
 local tint = ns.tint
 local status = ns.status
 local plural = ns.plural
-local className = ns.className
 
 local function trim(s)
     return (s or ""):gsub("^%s+", ""):gsub("%s+$", "")
@@ -76,16 +75,25 @@ local function loadCooldowns()
     return bucket
 end
 
+-- Sends record the whisper time as a positive timestamp; /wta -cd TIME NAME
+-- stores the expiry negated instead, so the entry carries its own duration
+-- rather than depending on the -cd value used at send time.
 local function pruneCooldowns(bucket, cooldownSeconds)
     local cutoff = time() - cooldownSeconds
     for n, ts in pairs(bucket) do
-        if ts < cutoff then bucket[n] = nil end
+        if ts < 0 then
+            if time() >= -ts then bucket[n] = nil end
+        elseif ts < cutoff then
+            bucket[n] = nil
+        end
     end
 end
 
 local function isCool(bucket, name, cooldownSeconds)
     local ts = bucket[name]
     if not ts then return true end
+    -- Negative entries are manual adds: cooling until their own expiry passes.
+    if ts < 0 then return time() >= -ts end
     -- Bare -cd has no duration: any entry on the list counts as still cooling.
     if not cooldownSeconds then return false end
     return (time() - ts) >= cooldownSeconds
@@ -141,24 +149,20 @@ local function whisperTarget(input)
     end
     local text = table.concat(tokens, " ", cursor)
     if text == "" then
-        status(tint("muted", "Usage:") .. " /wt MESSAGE — whisper your current target ("
-            .. tint("muted", "-ignore") .. " also adds them to the ignore list). "
-            .. tint("muted", "e.g.") .. " " .. tint("cool", "/wt got room for one more?") .. ".")
+        status("Usage: /wt MESSAGE — whisper your current target (-ignore also adds them to the ignore list). e.g. /wt got room for one more?")
         return
     end
     if not (UnitExists("target") and UnitIsPlayer("target")) then
-        status(tint("skip", "No target selected.") .. " Pick a player first and I'll whisper them.")
+        status(tint("skip", "No target selected.") .. " Pick a player first.")
         return
     end
     local targetName = UnitName("target")
-    local _, classFile = UnitClass("target")
     if isBlocked(loadBlocked(), targetName) then
-        status(tint("skip", "Blocked.") .. " " .. className(targetName, classFile)
-            .. " is on the block list. " .. tint("muted", "/wta unblock " .. targetName) .. " removes them.")
+        status(tint("skip", "Blocked.") .. " " .. targetName .. " is on the block list. /wta -unblock " .. targetName .. " removes them.")
         return
     end
     SendChatMessage(text, "WHISPER", nil, targetName)
-    status(tint("sent", "Whispered") .. " " .. className(targetName, classFile) .. ".")
+    status(tint("sent", "Whispered") .. " " .. targetName .. ".")
     if useSkip then loadSkip()[targetName] = true end
 end
 
@@ -264,7 +268,7 @@ end
 local function dispatchWho(opts)
     local count = C_FriendList.GetNumWhoResults()
     if count == 0 then
-        status(tint("skip", "No /who results yet.") .. " Run /who first and I'll whisper them.")
+        status(tint("skip", "No /who results.") .. " Run /who first.")
         return
     end
 
@@ -388,12 +392,11 @@ end
 local function whisperWho(input)
     local opts = parseFlags(trim(input))
     if opts.limitError then
-        status(tint("skip", "-limit needs a number.") .. " " .. tint("muted", "e.g.") .. " " .. tint("cool", "/ww -limit 10 LFM SM live") .. ".")
+        status(tint("skip", "-limit needs a number.") .. " e.g. /ww -limit 10 LFM SM live.")
         return
     end
     if not opts.text or opts.text == "" then
-        status(tint("muted", "Usage:") .. " /ww MESSAGE — whisper everyone in your current /who results. "
-            .. tint("muted", "e.g.") .. " " .. tint("cool", "/ww LFM SM live") .. ".  Type /wta for all options.")
+        status("Usage: /ww MESSAGE — whisper everyone in your current /who results. e.g. /ww LFM SM live. Type /wta for all options.")
         return
     end
     if opts.wait then
@@ -423,7 +426,7 @@ end
 local function whisperSellers(input)
     local opts = parseFlags(trim(input))
     if opts.limitError then
-        status(tint("skip", "-limit needs a number.") .. " " .. tint("muted", "e.g.") .. " " .. tint("cool", "/ws -limit 10 still selling?") .. ".")
+        status(tint("skip", "-limit needs a number.") .. " e.g. /ws -limit 10 still selling?")
         return
     end
     -- Sellers carry no class or zone, so the term filters can't apply here.
@@ -432,12 +435,11 @@ local function whisperSellers(input)
         return
     end
     if not opts.text or opts.text == "" then
-        status(tint("muted", "Usage:") .. " /ws MESSAGE — whisper every seller in the auction house Browse tab. "
-            .. tint("muted", "e.g.") .. " " .. tint("cool", "/ws still selling your Black Lotus?") .. ".")
+        status("Usage: /ws MESSAGE — whisper every seller in the auction house Browse tab. e.g. /ws still selling your Black Lotus?")
         return
     end
     if not AuctionFrame or not AuctionFrame:IsShown() then
-        status(tint("skip", "Auction house closed.") .. " Open the Browse tab and I'll whisper the sellers.")
+        status(tint("skip", "Auction house closed.") .. " Open the Browse tab first.")
         return
     end
     local names = collectAuctionSellers()
@@ -530,30 +532,26 @@ local function listBlocked()
         names[#names + 1] = shown
     end
     if #names == 0 then
-        status("Block list is empty. " .. tint("muted", "/wta block NAME") .. " adds someone.")
+        status("Block list is empty. /wta -block NAME adds someone.")
         return
     end
     table.sort(names)
-    for i, name in ipairs(names) do
-        names[i] = tint("name", name)
-    end
     status(#names .. " blocked: " .. table.concat(names, ", ") .. ".")
 end
 
 local function blockName(name)
     if name:find("%s") then
-        status(tint("skip", "One name at a time.") .. " " .. tint("muted", "e.g.") .. " " .. tint("cool", "/wta block Thrall") .. ".")
+        status(tint("skip", "One name at a time.") .. " e.g. /wta -block Thrall.")
         return
     end
     local blocked = loadBlocked()
     local key = name:lower()
     if blocked[key] then
-        status(tint("name", blocked[key]) .. " is already blocked.")
+        status(blocked[key] .. " is already blocked.")
         return
     end
     blocked[key] = displayName(name)
-    status(tint("skip", "Blocked") .. " " .. tint("name", blocked[key])
-        .. ". No command will whisper them. " .. tint("muted", "/wta unblock " .. blocked[key]) .. " undoes it.")
+    status(tint("sent", "Blocked") .. " " .. blocked[key] .. ". No command will whisper them. /wta -unblock " .. blocked[key] .. " undoes it.")
 end
 
 local function unblockName(name)
@@ -561,11 +559,39 @@ local function unblockName(name)
     local key = name:lower()
     local shown = blocked[key]
     if not shown then
-        status(tint("name", displayName(name)) .. " isn't on the block list.")
+        status(displayName(name) .. " isn't on the block list.")
         return
     end
     blocked[key] = nil
-    status("Unblocked " .. tint("name", shown) .. ".")
+    status(tint("sent", "Unblocked") .. " " .. shown .. ".")
+end
+
+local function ignoreName(name)
+    if name:find("%s") then
+        status(tint("skip", "One name at a time.") .. " e.g. /wta -ignore Thrall.")
+        return
+    end
+    local skip = loadSkip()
+    local shown = displayName(name)
+    if skip[shown] then
+        status(shown .. " is already on the ignore list.")
+        return
+    end
+    skip[shown] = true
+    status(tint("sent", "Ignoring") .. " " .. shown .. ". Sends with -ignore skip them. /wta clear empties the list.")
+end
+
+local function cooldownName(argsText)
+    local timeToken, name = argsText:match("^(%S+)%s+(%S+)$")
+    local minutes = timeToken and tonumber(timeToken)
+    if not minutes or minutes <= 0 or not name then
+        status(tint("skip", "-cd needs minutes, then one name.") .. " e.g. /wta -cd 30 Thrall.")
+        return
+    end
+    local shown = displayName(name)
+    -- Negated expiry marks a manual entry (see pruneCooldowns).
+    loadCooldowns()[shown] = -(time() + math.floor(minutes * 60))
+    status(tint("cool", "Cooldown set:") .. " sends with -cd skip " .. shown .. " for the next " .. timeToken .. " min. /wta clear cd lifts it.")
 end
 
 local function adminCommand(input)
@@ -574,31 +600,39 @@ local function adminCommand(input)
     input = raw:lower()
     if input == "" or input == "help" then
         ns.toggleHelp()
-    elseif input == "block" or input == "block list" then
+    elseif input == "-block" or input == "-block list" then
         listBlocked()
-    elseif input:match("^block%s") then
+    elseif input:match("^%-block%s") then
         blockName(trim(raw:match("^%S+%s+(.*)$")))
-    elseif input == "unblock" then
-        status(tint("muted", "Usage:") .. " /wta unblock NAME — remove a player from the block list.")
-    elseif input:match("^unblock%s") then
+    elseif input == "-unblock" then
+        status("Usage: /wta -unblock NAME — remove a player from the block list.")
+    elseif input:match("^%-unblock%s") then
         unblockName(trim(raw:match("^%S+%s+(.*)$")))
+    elseif input == "-ignore" then
+        status("Usage: /wta -ignore NAME — add a player to the ignore list.")
+    elseif input:match("^%-ignore%s") then
+        ignoreName(trim(raw:match("^%S+%s+(.*)$")))
+    elseif input == "-cd" then
+        status("Usage: /wta -cd MINUTES NAME — put a player on a manual cooldown.")
+    elseif input:match("^%-cd%s") then
+        cooldownName(trim(raw:match("^%S+%s+(.*)$")))
     elseif input == "stop" then
         local sent, dropped = ns.cancelQueue()
         if sent == 0 and dropped == 0 then
             status(tint("skip", "Nothing to stop.") .. " No whispers are queued.")
         else
-            status(tint("skip", "Stopped.") .. " " .. sent .. " sent, " .. dropped .. " " .. plural(dropped, "whisper", "whispers") .. " cancelled.")
+            status(tint("sent", "Stopped.") .. " " .. sent .. " sent, " .. dropped .. " " .. plural(dropped, "whisper", "whispers") .. " cancelled.")
         end
     elseif input == "reset" or input == "clear" then
         clearSkip()
-        status(tint("skip", "Ignore list cleared") .. ".")
+        status(tint("sent", "Ignore list cleared."))
     elseif input == "clear cd" then
         clearCooldowns()
-        status(tint("cool", "Cooldown history cleared") .. ".")
+        status(tint("sent", "Cooldown history cleared."))
     elseif input == "clear all" then
         clearSkip()
         clearCooldowns()
-        status("Ignore list and cooldown history cleared.")
+        status(tint("sent", "Ignore list and cooldown history cleared."))
     end
 end
 

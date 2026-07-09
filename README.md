@@ -114,9 +114,11 @@ Up to 20 non-warlocks, on a 15-minute cooldown. Order doesn't matter.
 | `/wta reset` or `/wta clear` | Empty the ignore list. |
 | `/wta clear cd` | Empty the cooldown history. |
 | `/wta clear all` | Empty both. |
-| `/wta block NAME` | Block a player permanently: no command ever whispers them. The list is account-wide, survives reloads, and isn't touched by `/wta clear`. |
-| `/wta block list` | Show everyone on the block list. |
-| `/wta unblock NAME` | Remove a player from the block list. |
+| `/wta -ignore NAME` | Add a player to the ignore list by hand — the same list `-ignore` sends build. |
+| `/wta -cd MINUTES NAME` | Put a player on a manual cooldown: any `-cd` send, timed or bare, skips them for the next MINUTES minutes. |
+| `/wta -block NAME` | Block a player permanently: no command ever whispers them. The list is account-wide, survives reloads, and isn't touched by `/wta clear`. |
+| `/wta -block list` | Show everyone on the block list. |
+| `/wta -unblock NAME` | Remove a player from the block list. |
 
 ## Throttling
 

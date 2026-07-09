@@ -60,15 +60,23 @@ local MANAGE = {
         desc = "Empty both the ignore list and the cooldown history.",
     },
     {
-        cmd = "/wta block NAME",
+        cmd = "/wta -ignore NAME",
+        desc = "Add a player to the ignore list by hand — the same list -ignore sends build.",
+    },
+    {
+        cmd = "/wta -cd MIN NAME",
+        desc = "Put a player on a manual MIN-minute cooldown: any -cd send skips them until it runs out.",
+    },
+    {
+        cmd = "/wta -block NAME",
         desc = "Block a player for good: no command ever whispers them. Account-wide; /wta clear leaves it alone.",
     },
     {
-        cmd = "/wta block list",
+        cmd = "/wta -block list",
         desc = "Show everyone on the block list.",
     },
     {
-        cmd = "/wta unblock NAME",
+        cmd = "/wta -unblock NAME",
         desc = "Remove a player from the block list.",
     },
 }
@@ -169,7 +177,7 @@ local function layoutContent(content, width)
     end
 
     local function exampleLine(text)
-        return tint("muted", "e.g.  ") .. tint("cool", text)
+        return "e.g.  " .. tint("cool", text)
     end
 
     addNote(INTRO)
@@ -186,7 +194,7 @@ local function layoutContent(content, width)
 
     addHeader("Flags")
     for _, entry in ipairs(FLAGS) do
-        local desc = entry.desc .. "  " .. tint("muted", "(" .. entry.on .. ")")
+        local desc = entry.desc .. "  (" .. entry.on .. ")"
         addRow(entry.cmd, desc .. "\n" .. exampleLine(entry.eg))
     end
 

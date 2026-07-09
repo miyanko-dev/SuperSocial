@@ -44,13 +44,13 @@ local function replyRecent(input)
         wipe(pendingReplyAt)
         wipe(answeredByShort)
         wipe(blastOutgoing)
-        status("Reply tracking reset. Run /ww, then /rr replies to whoever whispers back.")
+        status(tint("sent", "Reply tracking reset.") .. " Run /ww, then /rr replies to whoever whispers back.")
         return
     end
 
     local opts = ns.parseFlags(input)
     if opts.limitError then
-        status(tint("skip", "-limit needs a number.") .. " " .. tint("muted", "e.g.") .. " " .. tint("cool", "/rr -limit 5 invite incoming") .. ".")
+        status(tint("skip", "-limit needs a number.") .. " e.g. /rr -limit 5 invite incoming.")
         return
     end
     if opts.useCooldown then
@@ -58,8 +58,7 @@ local function replyRecent(input)
         return
     end
     if not opts.text or opts.text == "" then
-        status(tint("muted", "Usage:") .. " /rr MESSAGE — reply to everyone whispered via /ww who whispered back and hasn't been answered. "
-            .. tint("muted", "e.g.") .. " " .. tint("cool", "/rr invite incoming!") .. ".")
+        status("Usage: /rr MESSAGE — reply to everyone whispered via /ww who whispered back and hasn't been answered. e.g. /rr invite incoming!")
         return
     end
 
