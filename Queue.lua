@@ -28,9 +28,22 @@ local function sendNext()
     sent = sent + 1
 end
 
+-- Split a message on ";" into separate whispers, dropping empty parts.
+function ns.splitWhisper(text)
+    local parts = {}
+    for piece in (text or ""):gmatch("[^;]+") do
+        local part = piece:gsub("^%s+", ""):gsub("%s+$", "")
+        if part ~= "" then parts[#parts + 1] = part end
+    end
+    return parts
+end
+
 -- Queue a whisper: the first goes out immediately, the rest one per INTERVAL.
+-- A ";" in the text queues each part as its own whisper, back to back.
 function ns.queueWhisper(text, target)
-    pending[#pending + 1] = { text = text, target = target }
+    for _, part in ipairs(ns.splitWhisper(text)) do
+        pending[#pending + 1] = { text = part, target = target }
+    end
     if not ticker then
         sendNext()
         ticker = C_Timer.NewTicker(INTERVAL, sendNext)

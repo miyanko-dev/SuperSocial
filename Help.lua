@@ -124,6 +124,12 @@ local FLAGS = {
         desc = "Hold the whisper until fresh /who results arrive. Lets one macro run /who then /ww in a single click.",
         eg = "/ww -wait -limit 20 WTB Black Lotus",
     },
+    {
+        cmd = ";",
+        on = "/ww, /wt, /ws, /rr",
+        desc = "Split the message: each recipient gets every part as its own whisper, back to back.",
+        eg = "/ww Hey, how are you? ; up for tanking Scholo?",
+    },
 }
 
 local FOOTER =

@@ -147,8 +147,8 @@ local function whisperTarget(input)
         useSkip = true
         cursor = cursor + 1
     end
-    local text = table.concat(tokens, " ", cursor)
-    if text == "" then
+    local parts = ns.splitWhisper(table.concat(tokens, " ", cursor))
+    if #parts == 0 then
         status("Usage: /wt MESSAGE — whisper your current target (-ignore also adds them to the ignore list). e.g. /wt got room for one more?")
         return
     end
@@ -161,7 +161,9 @@ local function whisperTarget(input)
         status(tint("skip", "Blocked.") .. " " .. targetName .. " is on the block list. /wta -unblock " .. targetName .. " removes them.")
         return
     end
-    SendChatMessage(text, "WHISPER", nil, targetName)
+    for _, part in ipairs(parts) do
+        SendChatMessage(part, "WHISPER", nil, targetName)
+    end
     status(tint("sent", "Whispered") .. " " .. targetName .. ".")
     if useSkip then loadSkip()[targetName] = true end
 end
@@ -225,6 +227,10 @@ local function parseFlags(input)
     local words = {}
     for i = cursor, #tokens do words[#words + 1] = tokens[i] end
     opts.text = table.concat(words, " ")
+
+    -- A message of only semicolons splits to nothing; treat it as empty so
+    -- the usage checks catch it.
+    if #ns.splitWhisper(opts.text) == 0 then opts.text = "" end
     return opts
 end
 

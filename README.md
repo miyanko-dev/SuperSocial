@@ -100,6 +100,14 @@ Only useful in a macro alongside a `/who` — on its own it just waits for the n
 
 Up to 20 non-warlocks, on a 15-minute cooldown. Order doesn't matter.
 
+## Split a message into several whispers
+
+```
+/ww Hey, how are you? ; up for tanking Scholo?
+```
+
+A `;` splits the message: each recipient gets the part before it and the part after it as two separate whispers, back to back. More than one `;` sends more parts. Works on `/ww`, `/wt`, `/ws`, and `/rr`, and combines with every flag.
+
 ## Other commands
 
 | Command | What it does |
