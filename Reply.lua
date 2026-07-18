@@ -79,11 +79,13 @@ local function replyRecent(input)
     local groupSet = ns.buildGroupSet()
     local blocked = ns.loadBlocked()
 
-    local skippedGroup, skippedBlocked = 0, 0
+    local skippedGroup, skippedRecentGroup, skippedBlocked = 0, 0, 0
     local eligible = {}
     for short in pairs(pendingReplyAt) do
         if groupSet[short] then
             skippedGroup = skippedGroup + 1
+        elseif ns.wasRecentlyGrouped(short) then
+            skippedRecentGroup = skippedRecentGroup + 1
         elseif ns.isBlocked(blocked, whisperedByShort[short]) then
             skippedBlocked = skippedBlocked + 1
         else
@@ -101,6 +103,7 @@ local function replyRecent(input)
     local skipCounts = {
         blocked = skippedBlocked,
         group = skippedGroup,
+        recentGroup = skippedRecentGroup,
         limit = #eligible - sendCount,
     }
 

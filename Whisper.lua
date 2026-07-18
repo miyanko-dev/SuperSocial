@@ -134,8 +134,40 @@ local function buildGroupSet()
     return set
 end
 
+-- People who left the group (or the whole group on disband) still count as
+-- groupmates for the /ww and /rr skip checks for a while afterwards. The
+-- watcher diffs the roster on every change and stamps whoever vanished.
+-- Session-only, like the reply tracking.
+local RECENT_GROUP_SECONDS = 15 * 60
+local recentGroupLeftAt = {}  -- short name -> time they left the group
+local lastRoster = {}
+
+local rosterWatcher = CreateFrame("Frame")
+rosterWatcher:RegisterEvent("GROUP_ROSTER_UPDATE")
+rosterWatcher:RegisterEvent("PLAYER_ENTERING_WORLD")
+rosterWatcher:SetScript("OnEvent", function()
+    local roster = buildGroupSet()
+    for name in pairs(lastRoster) do
+        if not roster[name] then
+            recentGroupLeftAt[name] = time()
+        end
+    end
+    lastRoster = roster
+end)
+
+local function wasRecentlyGrouped(short)
+    local leftAt = recentGroupLeftAt[short]
+    if not leftAt then return false end
+    if (time() - leftAt) >= RECENT_GROUP_SECONDS then
+        recentGroupLeftAt[short] = nil
+        return false
+    end
+    return true
+end
+
 ns.nameOnly = nameOnly
 ns.buildGroupSet = buildGroupSet
+ns.wasRecentlyGrouped = wasRecentlyGrouped
 
 local function whisperTarget(input)
     input = trim(input or "")
@@ -291,7 +323,7 @@ local function dispatchWho(opts)
         end
     end
 
-    local skippedGroup, skippedBlocked, skippedFilter, skippedSkip, skippedCool = 0, 0, 0, 0, 0
+    local skippedGroup, skippedRecentGroup, skippedBlocked, skippedFilter, skippedSkip, skippedCool = 0, 0, 0, 0, 0, 0
     local eligible = {}
     for i = 1, count do
         local info = C_FriendList.GetWhoInfo(i)
@@ -300,6 +332,8 @@ local function dispatchWho(opts)
             local short = nameOnly(fullName)
             if groupSet[short or fullName] then
                 skippedGroup = skippedGroup + 1
+            elseif wasRecentlyGrouped(short or fullName) then
+                skippedRecentGroup = skippedRecentGroup + 1
             elseif isBlocked(blocked, fullName) then
                 skippedBlocked = skippedBlocked + 1
             elseif isFiltered(info, opts.terms) then
@@ -326,6 +360,7 @@ local function dispatchWho(opts)
         cooldown = skippedCool,
         filter = skippedFilter,
         group = skippedGroup,
+        recentGroup = skippedRecentGroup,
         limit = eligibleCount - sendCount,
     }
 

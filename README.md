@@ -12,7 +12,7 @@ Run a `/who` search, then `/ww MESSAGE` whispers everyone in the results. That's
 2. When the results appear, type `/ww WTB Wool Cloth 1g/stack`.
 3. Done — everyone in your `/who` results just got whispered.
 
-You'll never whisper yourself or anyone in your party or raid.
+You'll never whisper yourself, anyone in your party or raid, or anyone who was grouped with you in the last 15 minutes.
 
 ## Six optional extras for /ww
 
@@ -115,7 +115,7 @@ A `;` splits the message: each recipient gets the part before it and the part af
 | `/wt MESSAGE` | Whisper your current target. |
 | `/wt -ignore MESSAGE` | Whisper your target and add them to the ignore list. |
 | `/ws MESSAGE` | Whisper every seller in the auction house Browse tab. Takes `-limit N`, `-cd M`, and `-ignore` (sellers carry no class or zone, so `-skip`/`-only` don't apply). |
-| `/rr MESSAGE` | Reply to everyone whispered via `/ww` who has whispered you back and hasn't been answered yet (minus your party and raid). Recipients accumulate across `/ww` runs, and any reply — an earlier `/rr` or a manual whisper — counts as answered, so run several `/ww` queries, then one `/rr` handles them all without whispering anyone twice. People you've answered — via `/rr` or a manual whisper — stay excluded even if they whisper again; only a fresh `/ww` that includes them starts a new exchange. Takes `-limit N` (caps to the most recent repliers). |
+| `/rr MESSAGE` | Reply to everyone whispered via `/ww` who has whispered you back and hasn't been answered yet (minus your party and raid, including anyone who was grouped with you in the last 15 minutes). Recipients accumulate across `/ww` runs, and any reply — an earlier `/rr` or a manual whisper — counts as answered, so run several `/ww` queries, then one `/rr` handles them all without whispering anyone twice. People you've answered — via `/rr` or a manual whisper — stay excluded even if they whisper again; only a fresh `/ww` that includes them starts a new exchange. Takes `-limit N` (caps to the most recent repliers). |
 | `/rr reset` or `/rr clear` | Forget all tracked `/ww` recipients and their replies. Tracking isn't saved, so a `/reload` or re-login clears it too. |
 | `/wta` | Open the command and parameter reference window. |
 | `/wta stop` | Cancel any whispers still queued to send (reports how many went out and how many were cancelled). |

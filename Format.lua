@@ -41,6 +41,7 @@ local function skipBreakdown(counts)
     add(counts.cooldown, "cool", "on cooldown")
     add(counts.filter, nil, "filtered out")
     add(counts.group, nil, "in your group")
+    add(counts.recentGroup, nil, "recently in your group")
     add(counts.limit, nil, "over the limit")
     if #parts == 0 then return nil end
     return table.concat(parts, ", ")
