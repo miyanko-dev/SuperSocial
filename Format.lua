@@ -20,6 +20,24 @@ local function status(text)
     DEFAULT_CHAT_FRAME:AddMessage("|cffffff00[WhisperThemAll]:|r " .. text)
 end
 
+-- Every confirmation line is a colour-tinted lead phrase plus optional plain
+-- detail, so the shape and colour-by-meaning stay identical everywhere. Callers
+-- pick a builder by intent instead of assembling colours by hand.
+local function report(colorKey, lead, detail)
+    local head = tint(colorKey, lead)
+    if detail and detail ~= "" then
+        head = head .. " " .. detail
+    end
+    status(head)
+end
+
+-- ok: an action completed. fail: it couldn't, or nothing matched. cool: a
+-- cooldown was set. info: a neutral state readout or usage line, left plain.
+local function ok(lead, detail) report("sent", lead, detail) end
+local function fail(lead, detail) report("skip", lead, detail) end
+local function cool(lead, detail) report("cool", lead, detail) end
+local function info(text) status(text) end
+
 local function plural(n, singular, multiple)
     if n == 1 then return singular end
     return multiple
@@ -64,6 +82,10 @@ end
 
 ns.tint = tint
 ns.status = status
+ns.ok = ok
+ns.fail = fail
+ns.cool = cool
+ns.info = info
 ns.plural = plural
 ns.skipBreakdown = skipBreakdown
 ns.appliedSummary = appliedSummary

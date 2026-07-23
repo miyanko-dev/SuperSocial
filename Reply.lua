@@ -2,6 +2,9 @@ local _, ns = ...
 
 local tint = ns.tint
 local status = ns.status
+local ok = ns.ok
+local fail = ns.fail
+local info = ns.info
 local plural = ns.plural
 
 -- /rr replies to everyone whispered via /ww who has whispered back and hasn't
@@ -44,35 +47,35 @@ local function replyRecent(input)
         wipe(pendingReplyAt)
         wipe(answeredByShort)
         wipe(blastOutgoing)
-        status(tint("sent", "Reply tracking reset.") .. " Run /ww, then /rr replies to whoever whispers back.")
+        ok("Reply tracking reset.", "Run /ww, then /rr replies to whoever whispers back.")
         return
     end
 
     local opts = ns.parseFlags(input)
     if opts.limitError then
-        status(tint("skip", "-limit needs a number.") .. " e.g. /rr -limit 5 invite incoming.")
+        fail("-limit needs a number.", "e.g. /rr -limit 5 invite incoming.")
         return
     end
     if opts.useCooldown then
-        status(tint("skip", "-cd doesn't apply to /rr.") .. " Cooldowns only guard /ww and /ws.")
+        fail("-cd doesn't apply to /rr.", "Cooldowns only guard /ww and /ws.")
         return
     end
     if not opts.text or opts.text == "" then
-        status("Usage: /rr MESSAGE — reply to everyone whispered via /ww who whispered back and hasn't been answered. e.g. /rr invite incoming!")
+        info("Usage: /rr MESSAGE — reply to everyone whispered via /ww who whispered back and hasn't been answered. e.g. /rr invite incoming!")
         return
     end
 
     local trackedCount = 0
     for _ in pairs(whisperedByShort) do trackedCount = trackedCount + 1 end
     if trackedCount == 0 then
-        status(tint("skip", "No /ww whispers yet.") .. " Run /ww first, then /rr replies to whoever whispers back.")
+        fail("No /ww whispers yet.", "Run /ww first, then /rr replies to whoever whispers back.")
         return
     end
 
     local pending = 0
     for _ in pairs(pendingReplyAt) do pending = pending + 1 end
     if pending == 0 then
-        status(tint("skip", "No unanswered replies") .. " from your /ww whispers (" .. trackedCount .. " tracked).")
+        fail("No unanswered replies", "from your /ww whispers (" .. trackedCount .. " tracked).")
         return
     end
 
@@ -108,10 +111,10 @@ local function replyRecent(input)
     }
 
     if sendCount == 0 then
-        local line = tint("skip", "Nobody to reply to.") .. " None of " .. pending .. " unanswered " .. plural(pending, "reply", "replies") .. " are eligible"
+        local detail = "None of " .. pending .. " unanswered " .. plural(pending, "reply", "replies") .. " are eligible"
         local why = ns.skipBreakdown(skipCounts)
-        if why then line = line .. " (" .. why .. ")" end
-        status(line .. ".")
+        if why then detail = detail .. " (" .. why .. ")" end
+        fail("Nobody to reply to.", detail .. ".")
         return
     end
 
