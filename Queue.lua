@@ -1,7 +1,6 @@
 local _, ns = ...
 
--- Bulk whispers are spaced out so a big run stays under Blizzard's chat
--- throttle instead of silently dropping messages.
+-- Bulk whispers are spaced out so a big run stays under Blizzard's chat throttle instead of silently dropping messages.
 local INTERVAL = 0.25
 
 local pending = {}
@@ -16,20 +15,19 @@ end
 
 -- Send the next queued whisper, stopping the ticker once the queue is empty.
 local function sendNext()
-    local item = table.remove(pending, 1)
-    if not item then
+    local nextWhisper = table.remove(pending, 1)
+    if not nextWhisper then
         finish()
         return
     end
-    -- Flag the send as a blast so the reply tracker won't mistake its INFORM
-    -- event for a personal answer.
-    ns.markBlastWhisper(item.target)
-    SendChatMessage(item.text, "WHISPER", nil, item.target)
+    -- Flag the send as a blast so the reply tracker won't mistake its INFORM event for a personal answer.
+    ns.MarkBlastWhisper(nextWhisper.target)
+    SendChatMessage(nextWhisper.text, "WHISPER", nil, nextWhisper.target)
     sent = sent + 1
 end
 
 -- Split a message on ";" into separate whispers, dropping empty parts.
-function ns.splitWhisper(text)
+function ns.SplitWhisper(text)
     local parts = {}
     for piece in (text or ""):gmatch("[^;]+") do
         local part = piece:gsub("^%s+", ""):gsub("%s+$", "")
@@ -38,10 +36,9 @@ function ns.splitWhisper(text)
     return parts
 end
 
--- Queue a whisper: the first goes out immediately, the rest one per INTERVAL.
--- A ";" in the text queues each part as its own whisper, back to back.
-function ns.queueWhisper(text, target)
-    for _, part in ipairs(ns.splitWhisper(text)) do
+-- Queue a whisper: the first goes out immediately, the rest one per INTERVAL. A ";" in the text queues each part as its own whisper, back to back.
+function ns.QueueWhisper(text, target)
+    for _, part in ipairs(ns.SplitWhisper(text)) do
         pending[#pending + 1] = { text = part, target = target }
     end
     if not ticker then
@@ -50,9 +47,8 @@ function ns.queueWhisper(text, target)
     end
 end
 
--- Abort the current run. Returns how many already went out and how many were
--- still waiting, so the caller can report what the stop actually caught.
-function ns.cancelQueue()
+-- Abort the current run. Returns how many already went out and how many were still waiting, so the caller can report what the stop actually caught.
+function ns.CancelQueue()
     local doneSent = sent
     local dropped = #pending
     wipe(pending)

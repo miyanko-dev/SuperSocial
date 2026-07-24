@@ -1,13 +1,9 @@
 local _, ns = ...
 
--- A scrollable reference window for every command and option, opened with
--- "/wta". Replaces the old chat dump, which scrolled away and was hard to read.
+-- A scrollable reference window for every command and option, opened with "/wta". Replaces the old chat dump, which scrolled away and was hard to read.
+local tint = ns.Tint
 
-local tint = ns.tint
-
--- The window is three sections: the slash commands, the /wta management
--- subcommands, then the flags that refine /ww. "cmd" is the short left-column
--- label; "eg" carries the full worked example so the column stays scannable.
+-- The window is three sections: the slash commands, the /wta management subcommands, then the flags that refine /ww. "cmd" is the short left-column label; "eg" carries the full worked example so the column stays scannable.
 local INTRO =
     "Run /who, then /ww whispers everyone in the results — that's the core idea. "
     .. "The flags below refine who hears it, and they stack in any order."
@@ -40,8 +36,7 @@ local COMMANDS = {
     },
 }
 
--- Management subcommands: the label is the whole command, so these rows carry
--- no separate example.
+-- Management subcommands: the label is the whole command, so these rows carry no separate example.
 local MANAGE = {
     {
         cmd = "/wta stop",
@@ -136,10 +131,7 @@ local FOOTER =
     "Stack flags freely: /ww -limit 20 -skip Maraudon -cd 30 LFM tank for SM "
     .. "whispers up to 20 people, skips anyone in Maraudon, and won't repeat within 30 minutes."
 
--- Lay the entries out as a two-column table: gold label on the left, white
--- description with an amber example beneath on the right. Full-width notes lead
--- and close the page, and each section gets a larger heading. Returns the total
--- content height.
+-- Lay the entries out as a two-column table: gold label on the left, white description with an amber example beneath on the right. Full-width notes lead and close the page, and each section gets a larger heading. Returns the total content height.
 local function layoutContent(content, width)
     local LEFT, RIGHT = 16, 10
     local LABEL_WIDTH, COLUMN_GAP = 104, 14
@@ -245,7 +237,7 @@ local function buildFrame()
 end
 
 -- Built lazily on first open so we never create frames during file load.
-function ns.toggleHelp()
+function ns.ToggleHelp()
     if not helpFrame then buildFrame() end
     if helpFrame:IsShown() then
         helpFrame:Hide()
