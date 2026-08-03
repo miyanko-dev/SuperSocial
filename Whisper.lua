@@ -6,7 +6,6 @@ local tint = ns.Tint
 local status = ns.Status
 local ok = ns.Ok
 local fail = ns.Fail
-local cool = ns.Cool
 local note = ns.Note
 local plural = ns.Plural
 
@@ -77,23 +76,16 @@ local function loadCooldowns()
     return bucket
 end
 
--- Sends record the whisper time as a positive timestamp; /wta -cd TIME NAME stores the expiry negated instead, so the entry carries its own duration rather than depending on the -cd value used at send time.
 local function pruneCooldowns(bucket, cooldownSeconds)
     local cutoff = time() - cooldownSeconds
     for n, ts in pairs(bucket) do
-        if ts < 0 then
-            if time() >= -ts then bucket[n] = nil end
-        elseif ts < cutoff then
-            bucket[n] = nil
-        end
+        if ts < cutoff then bucket[n] = nil end
     end
 end
 
 local function isCool(bucket, name, cooldownSeconds)
     local ts = bucket[name]
     if not ts then return true end
-    -- Negative entries are manual adds: cooling until their own expiry passes.
-    if ts < 0 then return time() >= -ts end
     -- Bare -cd has no duration: any entry on the list counts as still cooling.
     if not cooldownSeconds then return false end
     return (time() - ts) >= cooldownSeconds
@@ -262,12 +254,8 @@ end
 
 -- Shared with /rr so both commands parse flags the same way; /rr only acts on -limit and rejects -cd.
 ns.ParseFlags = parseFlags
-ns.LoadSkip = loadSkip
 ns.LoadBlocked = loadBlocked
 ns.IsBlocked = isBlocked
-ns.LoadCooldowns = loadCooldowns
-ns.PruneCooldowns = pruneCooldowns
-ns.IsCool = isCool
 
 -- A term matches a player when it's a substring of their class or their zone, so "war" catches both Warriors and Warsong Gulch.
 local function matchesTerm(whoInfo, term)
@@ -379,22 +367,19 @@ local function dispatchWho(opts)
     end
 
     -- Summary first, so it leads the outgoing whisper lines; the queue then trickles them out under the chat throttle.
-    local function send()
-        status(summarize(tint("sent", "Whispering " .. sendCount)) .. ".")
-        local sentNames = {}
-        for i = 1, sendCount do
-            local fullName = eligible[i]
-            ns.QueueWhisper(opts.text, fullName)
-            sentNames[#sentNames + 1] = fullName
-            if skip then skip[fullName] = true end
-            -- Only a timed -cd records new recipients; bare -cd just reads the list.
-            if cooldownBucket and cooldownMinutes then cooldownBucket[fullName] = time() end
-        end
-        -- /rr replies to these names once they whisper back.
-        ns.TrackWhispered(sentNames)
+    status(summarize(tint("sent", "Whispering " .. sendCount)) .. ".")
+    local sentNames = {}
+    for i = 1, sendCount do
+        local fullName = eligible[i]
+        ns.QueueWhisper(opts.text, fullName)
+        sentNames[#sentNames + 1] = fullName
+        if skip then skip[fullName] = true end
+        -- Only a timed -cd records new recipients; bare -cd just reads the list.
+        if cooldownBucket and cooldownMinutes then cooldownBucket[fullName] = time() end
     end
 
-    send()
+    -- /rr replies to these names once they whisper back.
+    ns.TrackWhispered(sentNames)
 end
 
 -- -wait lets a one-click macro send /who then /ww: we hold the whisper until the next WHO_LIST_UPDATE brings the fresh results, with a timeout so a dropped update never leaves the command hanging.
@@ -535,18 +520,14 @@ local function whisperSellers(input)
         return line
     end
 
-    local function send()
-        status(summarize(tint("sent", "Whispering " .. sendCount)) .. ".")
-        for i = 1, sendCount do
-            local sellerName = eligible[i]
-            ns.QueueWhisper(opts.text, sellerName)
-            if skip then skip[sellerName] = true end
-            -- Only a timed -cd records new recipients; bare -cd just reads the list.
-            if cooldownBucket and cooldownMinutes then cooldownBucket[sellerName] = time() end
-        end
+    status(summarize(tint("sent", "Whispering " .. sendCount)) .. ".")
+    for i = 1, sendCount do
+        local sellerName = eligible[i]
+        ns.QueueWhisper(opts.text, sellerName)
+        if skip then skip[sellerName] = true end
+        -- Only a timed -cd records new recipients; bare -cd just reads the list.
+        if cooldownBucket and cooldownMinutes then cooldownBucket[sellerName] = time() end
     end
-
-    send()
 end
 
 -- Display form with a leading capital, matching how names render in game.
@@ -606,20 +587,7 @@ local function ignoreName(name)
         return
     end
     skip[shown] = true
-    ok("Ignoring", shown .. ". Sends with -ignore skip them. /wta clear empties the list.")
-end
-
-local function cooldownName(argsText)
-    local timeToken, name = argsText:match("^(%S+)%s+(%S+)$")
-    local minutes = timeToken and tonumber(timeToken)
-    if not minutes or minutes <= 0 or not name then
-        fail("-cd needs minutes, then one name.", "e.g. /wta -cd 30 Thrall.")
-        return
-    end
-    local shown = displayName(name)
-    -- Negated expiry marks a manual entry (see pruneCooldowns).
-    loadCooldowns()[shown] = -(time() + math.floor(minutes * 60))
-    cool("Cooldown set:", "sends with -cd skip " .. shown .. " for the next " .. timeToken .. " min. /wta clear cd lifts it.")
+    ok("Ignoring", shown .. ". Sends with -ignore skip them. /wta -ignore clear empties the list.")
 end
 
 local function adminCommand(input)
@@ -637,13 +605,17 @@ local function adminCommand(input)
     elseif input:match("^%-unblock%s") then
         unblockName(trim(raw:match("^%S+%s+(.*)$")))
     elseif input == "-ignore" then
-        note("Usage: /wta -ignore NAME — add a player to the ignore list.")
+        note("Usage: /wta -ignore NAME — add a player to the ignore list, or /wta -ignore clear to empty it.")
+    elseif input == "-ignore clear" then
+        clearSkip()
+        ok("Ignore list cleared.")
     elseif input:match("^%-ignore%s") then
         ignoreName(trim(raw:match("^%S+%s+(.*)$")))
-    elseif input == "-cd" then
-        note("Usage: /wta -cd MINUTES NAME — put a player on a manual cooldown.")
-    elseif input:match("^%-cd%s") then
-        cooldownName(trim(raw:match("^%S+%s+(.*)$")))
+    elseif input == "-cd clear" then
+        clearCooldowns()
+        ok("Cooldown history cleared.")
+    elseif input:match("^%-cd") then
+        note("Usage: /wta -cd clear — empty the cooldown history.")
     elseif input == "stop" then
         local sent, dropped = ns.CancelQueue()
         if sent == 0 and dropped == 0 then
@@ -651,16 +623,6 @@ local function adminCommand(input)
         else
             ok("Stopped.", sent .. " sent, " .. dropped .. " " .. plural(dropped, "whisper", "whispers") .. " cancelled.")
         end
-    elseif input == "reset" or input == "clear" then
-        clearSkip()
-        ok("Ignore list cleared.")
-    elseif input == "clear cd" then
-        clearCooldowns()
-        ok("Cooldown history cleared.")
-    elseif input == "clear all" then
-        clearSkip()
-        clearCooldowns()
-        ok("Ignore list and cooldown history cleared.")
     end
 end
 

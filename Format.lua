@@ -26,10 +26,9 @@ local function report(colorKey, lead, detail)
     status(head)
 end
 
--- ok: an action completed. fail: it couldn't, or nothing matched. cool: a cooldown was set. note: a neutral state readout or usage line, left plain.
+-- ok: an action completed. fail: it couldn't, or nothing matched. note: a neutral state readout or usage line, left plain.
 local function ok(lead, detail) report("sent", lead, detail) end
 local function fail(lead, detail) report("skip", lead, detail) end
-local function cool(lead, detail) report("cool", lead, detail) end
 local function note(text) status(text) end
 
 local function plural(n, singular, multiple)
@@ -74,7 +73,6 @@ ns.Tint = tint
 ns.Status = status
 ns.Ok = ok
 ns.Fail = fail
-ns.Cool = cool
 ns.Note = note
 ns.Plural = plural
 ns.SkipBreakdown = skipBreakdown

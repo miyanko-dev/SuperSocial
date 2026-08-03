@@ -43,28 +43,20 @@ local MANAGE = {
         desc = "Cancel any whispers still queued to send.",
     },
     {
-        cmd = "/wta clear",
-        desc = "Empty the ignore list (/wta reset does the same).",
-    },
-    {
-        cmd = "/wta clear cd",
-        desc = "Empty the cooldown history.",
-    },
-    {
-        cmd = "/wta clear all",
-        desc = "Empty both the ignore list and the cooldown history.",
-    },
-    {
         cmd = "/wta -ignore NAME",
         desc = "Add a player to the ignore list by hand — the same list -ignore sends build.",
     },
     {
-        cmd = "/wta -cd MIN NAME",
-        desc = "Put a player on a manual MIN-minute cooldown: any -cd send skips them until it runs out.",
+        cmd = "/wta -ignore clear",
+        desc = "Empty the ignore list.",
+    },
+    {
+        cmd = "/wta -cd clear",
+        desc = "Empty the cooldown history.",
     },
     {
         cmd = "/wta -block NAME",
-        desc = "Block a player for good: no command ever whispers them. Account-wide; /wta clear leaves it alone.",
+        desc = "Block a player for good: no command ever whispers them. Account-wide; /wta -ignore clear leaves it alone.",
     },
     {
         cmd = "/wta -block list",
@@ -98,7 +90,7 @@ local FLAGS = {
     {
         cmd = "-ignore",
         on = "/ww, /wt, /ws",
-        desc = "Skip anyone on the ignore list, then add the people you whisper to it. Survives reloads; clear with /wta clear.",
+        desc = "Skip anyone on the ignore list, then add the people you whisper to it. Survives reloads; clear with /wta -ignore clear.",
         eg = "/ww -ignore WTS enchant mats, whisper me",
     },
     {

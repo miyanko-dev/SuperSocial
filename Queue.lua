@@ -1,7 +1,7 @@
 local _, ns = ...
 
--- Bulk whispers are spaced out so a big run stays under Blizzard's chat throttle instead of silently dropping messages.
-local INTERVAL = 0.25
+-- Bulk whispers are spaced out so a big run stays under Blizzard's whisper throttle instead of dropping messages and spamming "you can't message that player right now" errors.
+local INTERVAL = 0.5
 
 local pending = {}
 local ticker

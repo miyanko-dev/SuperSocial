@@ -52,7 +52,7 @@ Whispers only the first 10 people from your `/who` results. The same `-limit` wo
 /ww -ignore Selling enchant mats, whisper for list
 ```
 
-`-ignore` whispers everyone, then **remembers** each recipient. Run `/ww -ignore` again and those people are skipped. The list survives reloads. Clear it with `/wta clear`.
+`-ignore` whispers everyone, then **remembers** each recipient. Run `/ww -ignore` again and those people are skipped. The list survives reloads. Clear it with `/wta -ignore clear`.
 
 Use `-ignore` when you're pitching the same thing over a long session and want to make sure nobody hears it twice.
 
@@ -62,7 +62,7 @@ Use `-ignore` when you're pitching the same thing over a long session and want t
 /ww -cd 30 WTB Black Lotus, paying 80g
 ```
 
-`-cd 30` whispers everyone, then puts each recipient on a 30-minute cooldown. Run `/ww -cd 30` again within that window and the people you just whispered are skipped. The cooldown list is account-wide and survives reloads and relogs, so it keeps working across your characters. Cooldowns age out on their own. Clear early with `/wta clear cd`.
+`-cd 30` whispers everyone, then puts each recipient on a 30-minute cooldown. Run `/ww -cd 30` again within that window and the people you just whispered are skipped. The cooldown list is account-wide and survives reloads and relogs, so it keeps working across your characters. Cooldowns age out on their own. Clear early with `/wta -cd clear`.
 
 Use `-cd 30` when you'll repeat the same broadcast every few minutes.
 
@@ -119,18 +119,16 @@ A `;` splits the message: each recipient gets the part before it and the part af
 | `/rr reset` or `/rr clear` | Forget all tracked `/ww` recipients and their replies. Tracking isn't saved, so a `/reload` or re-login clears it too. |
 | `/wta` | Open the command and parameter reference window. |
 | `/wta stop` | Cancel any whispers still queued to send (reports how many went out and how many were cancelled). |
-| `/wta reset` or `/wta clear` | Empty the ignore list. |
-| `/wta clear cd` | Empty the cooldown history. |
-| `/wta clear all` | Empty both. |
 | `/wta -ignore NAME` | Add a player to the ignore list by hand — the same list `-ignore` sends build. |
-| `/wta -cd MINUTES NAME` | Put a player on a manual cooldown: any `-cd` send, timed or bare, skips them for the next MINUTES minutes. |
-| `/wta -block NAME` | Block a player permanently: no command ever whispers them. The list is account-wide, survives reloads, and isn't touched by `/wta clear`. |
+| `/wta -ignore clear` | Empty the ignore list. |
+| `/wta -cd clear` | Empty the cooldown history. |
+| `/wta -block NAME` | Block a player permanently: no command ever whispers them. The list is account-wide, survives reloads, and isn't touched by `/wta -ignore clear`. |
 | `/wta -block list` | Show everyone on the block list. |
 | `/wta -unblock NAME` | Remove a player from the block list. |
 
 ## Throttling
 
-Whispers are sent one every 250ms rather than all at once, so a big `/ww`, `/ws`, or `/rr` run stays under Blizzard's chat throttle instead of silently dropping messages or disconnecting you. The chat summary prints immediately; the whispers themselves trickle out over the following seconds. Spotted a mistake mid-run? `/wta stop` cancels whatever's still queued.
+Whispers are sent one every 0.5s rather than all at once, so a big `/ww`, `/ws`, or `/rr` run stays under Blizzard's whisper throttle instead of dropping messages and filling your chat with "you can't message that player right now" errors. The chat summary prints immediately; the whispers themselves trickle out over the following seconds. Spotted a mistake mid-run? `/wta stop` cancels whatever's still queued.
 
 ## Chat feedback
 
