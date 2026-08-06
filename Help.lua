@@ -1,12 +1,26 @@
 local _, ns = ...
 
--- A scrollable reference window for every command and option, opened with "/wta". Replaces the old chat dump, which scrolled away and was hard to read.
-local tint = ns.Tint
+-- A scrollable reference panel for every command and option, opened with "/wta" or the minimap button. Styled after the Target Finder panel so the two addons read as one family: dialog-box backdrop, header banner, and bordered section containers.
 
--- The window is three sections: the slash commands, the /wta management subcommands, then the flags that refine /ww. "cmd" is the short left-column label; "eg" carries the full worked example so the column stays scannable.
+local PANEL_WIDTH = 480
+local PANEL_HEIGHT = 580
+local PANEL_PAD = 14
+local PANEL_PAD_TOP = 52       -- clears the dialog-box-header banner
+local PANEL_PAD_BOTTOM = 14
+local SCROLLBAR_GUTTER = 22    -- room for the scroll bar the template hangs outside its right edge
+local SECTION_GAP = 26         -- also clears the section label riding above each box
+local SECTION_INNER_PAD = 12
+local SECTION_LABEL_LIFT = 7
+local LABEL_WIDTH = 116
+local COLUMN_GAP = 12
+local ROW_GAP = 10
+
+local YELLOW = "|cffffd200"
+
+-- The panel is three sections: the slash commands, the /wta management subcommands, then the flags that refine /ww. "cmd" is the yellow left-column label; "eg" carries the full worked example so the column stays scannable.
 local INTRO =
     "Run /who, then /ww whispers everyone in the results — that's the core idea. "
-    .. "The flags below refine who hears it, and they stack in any order."
+    .. "The flags below refine who hears it, and they stack in any order before the message."
 
 local COMMANDS = {
     {
@@ -31,40 +45,56 @@ local COMMANDS = {
     },
     {
         cmd = "/wta",
-        desc = "Open this reference window.",
+        desc = "Open this reference panel.",
         eg = "/wta",
     },
 }
 
--- Management subcommands: the label is the whole command, so these rows carry no separate example.
 local MANAGE = {
     {
         cmd = "/wta stop",
         desc = "Cancel any whispers still queued to send.",
+        eg = "/wta stop",
+    },
+    {
+        cmd = "/wta rate",
+        desc = "Show the learned send rate in whispers per second.",
+        eg = "/wta rate",
+    },
+    {
+        cmd = "/wta rate reset",
+        desc = "Restore the default send rate; the server re-teaches it from there.",
+        eg = "/wta rate reset",
     },
     {
         cmd = "/wta -ignore NAME",
         desc = "Add a player to the ignore list by hand — the same list -ignore sends build.",
+        eg = "/wta -ignore Thrall",
     },
     {
         cmd = "/wta -ignore clear",
         desc = "Empty the ignore list.",
+        eg = "/wta -ignore clear",
     },
     {
         cmd = "/wta -cd clear",
         desc = "Empty the cooldown history.",
+        eg = "/wta -cd clear",
     },
     {
         cmd = "/wta -block NAME",
         desc = "Block a player for good: no command ever whispers them. Account-wide; /wta -ignore clear leaves it alone.",
+        eg = "/wta -block Thrall",
     },
     {
         cmd = "/wta -block list",
         desc = "Show everyone on the block list.",
+        eg = "/wta -block list",
     },
     {
         cmd = "/wta -unblock NAME",
         desc = "Remove a player from the block list.",
+        eg = "/wta -unblock Thrall",
     },
 }
 
@@ -90,7 +120,7 @@ local FLAGS = {
     {
         cmd = "-ignore",
         on = "/ww, /wt, /ws",
-        desc = "Skip anyone on the ignore list, then add the people you whisper to it. Survives reloads; clear with /wta -ignore clear.",
+        desc = "Skip anyone on the ignore list, then add the people you whisper to it. Survives reloads, entries age out after 30 days; clear with /wta -ignore clear.",
         eg = "/ww -ignore WTS enchant mats, whisper me",
     },
     {
@@ -121,111 +151,164 @@ local FLAGS = {
 
 local FOOTER =
     "Stack flags freely: /ww -limit 20 -skip Maraudon -cd 30 LFM tank for SM "
-    .. "whispers up to 20 people, skips anyone in Maraudon, and won't repeat within 30 minutes."
+    .. "whispers up to 20 people, skips anyone in Maraudon, and won't repeat within 30 minutes. "
+    .. "Flags go before the message."
 
--- Lay the entries out as a two-column table: gold label on the left, white description with an amber example beneath on the right. Full-width notes lead and close the page, and each section gets a larger heading. Returns the total content height.
-local function layoutContent(content, width)
-    local LEFT, RIGHT = 16, 10
-    local LABEL_WIDTH, COLUMN_GAP = 104, 14
-    local bodyLeft = LEFT + LABEL_WIDTH + COLUMN_GAP
-    local bodyWidth = width - bodyLeft - RIGHT
-    local y = 12
+-- Dialog-box header banner reconstructed from three texture pieces (left cap, repeating middle, right cap), matching the Target Finder title.
+local function buildTitleHeader(parent, text)
+    local HEADER_TEXTURE = "Interface\\DialogFrame\\UI-DialogBox-Header"
 
-    local function addNote(text)
-        local note = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        note:SetPoint("TOPLEFT", LEFT, -y)
-        note:SetWidth(width - LEFT - RIGHT)
-        note:SetJustifyH("LEFT")
-        note:SetSpacing(2)
-        note:SetText(text)
-        y = y + note:GetStringHeight() + 12
+    local mid = parent:CreateTexture(nil, "OVERLAY")
+    mid:SetTexture(HEADER_TEXTURE)
+    mid:SetTexCoord(0.31, 0.67, 0, 0.63)
+    mid:SetPoint("TOP", parent, "TOP", 0, 12)
+    mid:SetHeight(40)
+
+    local left = parent:CreateTexture(nil, "OVERLAY")
+    left:SetTexture(HEADER_TEXTURE)
+    left:SetTexCoord(0.21, 0.31, 0, 0.63)
+    left:SetPoint("RIGHT", mid, "LEFT")
+    left:SetWidth(30)
+    left:SetHeight(40)
+
+    local right = parent:CreateTexture(nil, "OVERLAY")
+    right:SetTexture(HEADER_TEXTURE)
+    right:SetTexCoord(0.67, 0.77, 0, 0.63)
+    right:SetPoint("LEFT", mid, "RIGHT")
+    right:SetWidth(30)
+    right:SetHeight(40)
+
+    local title = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    title:SetPoint("TOP", mid, "TOP", 0, -14)
+    title:SetText(text)
+
+    mid:SetWidth((title:GetStringWidth() or 0) + 10)
+end
+
+-- Bordered section container with its yellow label riding on the top edge, matching the Target Finder sections.
+local function buildSection(parent, labelText)
+    local section = CreateFrame("Frame", nil, parent, "BackdropTemplate")
+    section:SetBackdrop({
+        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
+        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
+        tile = true,
+        tileSize = 16,
+        edgeSize = 16,
+        insets = { left = 3, right = 3, top = 5, bottom = 3 },
+    })
+    section:SetBackdropColor(0.1, 0.1, 0.1, 0.5)
+    section:SetBackdropBorderColor(0.4, 0.4, 0.4)
+
+    local label = section:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+    label:SetPoint("BOTTOMLEFT", section, "TOPLEFT", 12, SECTION_LABEL_LIFT)
+    label:SetText(labelText)
+
+    return section
+end
+
+-- One two-column row: yellow command label left, white description with a yellow example beneath on the right. Returns the row height.
+local function buildRow(section, y, width, label, body)
+    local bodyLeft = SECTION_INNER_PAD + LABEL_WIDTH + COLUMN_GAP
+
+    local left = section:CreateFontString(nil, "ARTWORK", "GameFontNormal")
+    left:SetPoint("TOPLEFT", SECTION_INNER_PAD, -y)
+    left:SetWidth(LABEL_WIDTH)
+    left:SetJustifyH("LEFT")
+    left:SetText(label)
+
+    local right = section:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    right:SetPoint("TOPLEFT", bodyLeft, -y - 1)
+    right:SetWidth(width - bodyLeft - SECTION_INNER_PAD)
+    right:SetJustifyH("LEFT")
+    right:SetSpacing(2)
+    right:SetText(body)
+
+    return math.max(left:GetStringHeight(), right:GetStringHeight())
+end
+
+local function exampleLine(text)
+    return "e.g.  " .. YELLOW .. text .. "|r"
+end
+
+-- Lay one section's entries and return the section frame with its height set.
+local function layoutSection(content, width, labelText, entries, describe)
+    local section = buildSection(content, labelText)
+    local y = SECTION_INNER_PAD
+    for _, entry in ipairs(entries) do
+        y = y + buildRow(section, y, width, entry.cmd, describe(entry)) + ROW_GAP
     end
+    section:SetHeight(y - ROW_GAP + SECTION_INNER_PAD)
+    return section
+end
 
-    local function addHeader(text)
-        y = y + 8
-        local header = content:CreateFontString(nil, "ARTWORK", "GameFontNormalLarge")
-        header:SetPoint("TOPLEFT", LEFT, -y)
-        header:SetText(text)
-        y = y + header:GetStringHeight() + 10
-    end
-
-    local function addRow(label, body)
-        local left = content:CreateFontString(nil, "ARTWORK", "GameFontNormal")
-        left:SetPoint("TOPLEFT", LEFT, -y)
-        left:SetWidth(LABEL_WIDTH)
-        left:SetJustifyH("LEFT")
-        left:SetText(label)
-
-        local right = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-        right:SetPoint("TOPLEFT", bodyLeft, -y - 1)
-        right:SetWidth(bodyWidth)
-        right:SetJustifyH("LEFT")
-        right:SetSpacing(2)
-        right:SetText(body)
-
-        y = y + math.max(left:GetStringHeight(), right:GetStringHeight()) + 12
-    end
-
-    local function exampleLine(text)
-        return "e.g.  " .. tint("cool", text)
-    end
-
-    addNote(INTRO)
-
-    addHeader("Commands")
-    for _, entry in ipairs(COMMANDS) do
-        addRow(entry.cmd, entry.desc .. "\n" .. exampleLine(entry.eg))
-    end
-
-    addHeader("Manage")
-    for _, entry in ipairs(MANAGE) do
-        addRow(entry.cmd, entry.desc)
-    end
-
-    addHeader("Flags")
-    for _, entry in ipairs(FLAGS) do
-        local desc = entry.desc .. "  (" .. entry.on .. ")"
-        addRow(entry.cmd, desc .. "\n" .. exampleLine(entry.eg))
-    end
-
-    addHeader("Combine them")
-    addNote(FOOTER)
-
-    return y + 8
+-- Full-width white note, used for the intro and the closing combination example.
+local function buildNote(content, y, width, text)
+    local note = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    note:SetPoint("TOPLEFT", PANEL_PAD, -y)
+    note:SetWidth(width - PANEL_PAD * 2)
+    note:SetJustifyH("LEFT")
+    note:SetSpacing(2)
+    note:SetText(text)
+    return note:GetStringHeight()
 end
 
 local helpFrame
 
 local function buildFrame()
-    local frame = CreateFrame("Frame", "WhisperThemAllHelpFrame", UIParent, "BasicFrameTemplateWithInset")
-    frame:SetSize(500, 560)
-    frame:SetPoint("CENTER")
-    frame:SetFrameStrata("HIGH")
-    frame:SetToplevel(true)
-    frame:SetClampedToScreen(true)
-    frame.TitleText:SetText("Whisper Them All")
-
-    frame:SetMovable(true)
-    frame:EnableMouse(true)
-    frame:RegisterForDrag("LeftButton")
-    frame:SetScript("OnDragStart", frame.StartMoving)
-    frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
-
-    -- Let Escape close it like other panels.
+    local panel = CreateFrame("Frame", "WhisperThemAllHelpFrame", UIParent, "BackdropTemplate")
+    panel:SetSize(PANEL_WIDTH, PANEL_HEIGHT)
+    panel:SetPoint("CENTER")
+    panel:SetFrameStrata("DIALOG")
+    panel:SetClampedToScreen(true)
+    panel:SetMovable(true)
+    panel:EnableMouse(true)
+    panel:RegisterForDrag("LeftButton")
+    panel:SetScript("OnDragStart", panel.StartMoving)
+    panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
+    panel:SetBackdrop({
+        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
+        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
+        tile = true,
+        tileSize = 32,
+        edgeSize = 32,
+        insets = { left = 8, right = 8, top = 8, bottom = 8 },
+    })
     tinsert(UISpecialFrames, "WhisperThemAllHelpFrame")
 
-    local scroll = CreateFrame("ScrollFrame", "WhisperThemAllHelpScroll", frame, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", 10, -30)
-    scroll:SetPoint("BOTTOMRIGHT", -30, 8)
+    buildTitleHeader(panel, "Whisper Them All")
+
+    local cornerClose = CreateFrame("Button", nil, panel, "UIPanelCloseButton")
+    cornerClose:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -6, -6)
+
+    local scroll = CreateFrame("ScrollFrame", "WhisperThemAllHelpScroll", panel, "UIPanelScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", PANEL_PAD, -PANEL_PAD_TOP)
+    scroll:SetPoint("BOTTOMRIGHT", -PANEL_PAD - SCROLLBAR_GUTTER, PANEL_PAD_BOTTOM)
 
     local content = CreateFrame("Frame", nil, scroll)
     scroll:SetScrollChild(content)
-
     local width = scroll:GetWidth()
-    content:SetSize(width, layoutContent(content, width))
+    content:SetWidth(width)
 
-    frame:Hide()
-    helpFrame = frame
+    local y = 4
+    y = y + buildNote(content, y, width, INTRO) + SECTION_GAP
+
+    local sections = {
+        { label = "Commands", entries = COMMANDS, describe = function(e) return e.desc .. "\n" .. exampleLine(e.eg) end },
+        { label = "Manage", entries = MANAGE, describe = function(e) return e.desc .. "\n" .. exampleLine(e.eg) end },
+        { label = "Flags", entries = FLAGS, describe = function(e) return e.desc .. "  (" .. e.on .. ")\n" .. exampleLine(e.eg) end },
+    }
+    for _, spec in ipairs(sections) do
+        local section = layoutSection(content, width, spec.label, spec.entries, spec.describe)
+        section:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
+        section:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, -y)
+        y = y + section:GetHeight() + SECTION_GAP
+    end
+
+    y = y + buildNote(content, y, width, FOOTER)
+    content:SetHeight(y + PANEL_PAD_BOTTOM)
+
+    panel:Hide()
+    helpFrame = panel
 end
 
 -- Built lazily on first open so we never create frames during file load.

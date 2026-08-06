@@ -52,7 +52,7 @@ Whispers only the first 10 people from your `/who` results. The same `-limit` wo
 /ww -ignore Selling enchant mats, whisper for list
 ```
 
-`-ignore` whispers everyone, then **remembers** each recipient. Run `/ww -ignore` again and those people are skipped. The list survives reloads. Clear it with `/wta -ignore clear`.
+`-ignore` whispers everyone, then **remembers** each recipient. Run `/ww -ignore` again and those people are skipped. The list survives reloads and entries age out after 30 days on their own. Clear it early with `/wta -ignore clear`.
 
 Use `-ignore` when you're pitching the same thing over a long session and want to make sure nobody hears it twice.
 
@@ -98,7 +98,7 @@ Only useful in a macro alongside a `/who` — on its own it just waits for the n
 /ww -limit 20 -skip Warlock -cd 15 LFM SM live, need 1 tank
 ```
 
-Up to 20 non-warlocks, on a 15-minute cooldown. Order doesn't matter.
+Up to 20 non-warlocks, on a 15-minute cooldown. Flag order doesn't matter, but flags go **before** the message: a known flag found inside the message aborts the send with a notice instead of whispering it as text.
 
 ## Split a message into several whispers
 
@@ -117,8 +117,10 @@ A `;` splits the message: each recipient gets the part before it and the part af
 | `/ws MESSAGE` | Whisper every seller in the auction house Browse tab. Takes `-limit N`, `-cd M`, and `-ignore` (sellers carry no class or zone, so `-skip`/`-only` don't apply). |
 | `/rr MESSAGE` | Reply to everyone whispered via `/ww` who has whispered you back and hasn't been answered yet (minus your party and raid, including anyone who was grouped with you in the last 15 minutes). Recipients accumulate across `/ww` runs, and any reply — an earlier `/rr` or a manual whisper — counts as answered, so run several `/ww` queries, then one `/rr` handles them all without whispering anyone twice. People you've answered — via `/rr` or a manual whisper — stay excluded even if they whisper again; only a fresh `/ww` that includes them starts a new exchange. Takes `-limit N` (caps to the most recent repliers). |
 | `/rr reset` or `/rr clear` | Forget all tracked `/ww` recipients and their replies. Tracking isn't saved, so a `/reload` or re-login clears it too. |
-| `/wta` | Open the command and parameter reference window. |
+| `/wta` | Open the command and parameter reference panel. |
 | `/wta stop` | Cancel any whispers still queued to send (reports how many went out and how many were cancelled). |
+| `/wta rate` | Show the learned send rate in whispers per second. |
+| `/wta rate reset` | Restore the default send rate; the server re-teaches it from there. |
 | `/wta -ignore NAME` | Add a player to the ignore list by hand — the same list `-ignore` sends build. |
 | `/wta -ignore clear` | Empty the ignore list. |
 | `/wta -cd clear` | Empty the cooldown history. |
@@ -126,16 +128,50 @@ A `;` splits the message: each recipient gets the part before it and the part af
 | `/wta -block list` | Show everyone on the block list. |
 | `/wta -unblock NAME` | Remove a player from the block list. |
 
-## Throttling
+## Minimap button
 
-Whispers are sent one every 0.5s rather than all at once, so a big `/ww`, `/ws`, or `/rr` run stays under Blizzard's whisper throttle instead of dropping messages and filling your chat with "you can't message that player right now" errors. The chat summary prints immediately; the whispers themselves trickle out over the following seconds. Spotted a mistake mid-run? `/wta stop` cancels whatever's still queued.
+A minimap button (LibDBIcon) toggles the command reference panel on left-click — the same panel `/wta` opens. Drag it around the minimap edge to reposition; the spot is saved account-wide.
+
+## Confirmed delivery
+
+Every delivered whisper is echoed back by the server itself (the `To Name: ...` line). The addon counts those echoes, so its closing line is a real delivery confirmation, not a guess: `Delivered all 20 whispers.` prints only when every whisper of the run was confirmed by the server, and a run with losses closes with the honest split (`18 delivered, 1 unreachable, 1 failed of 20 whispers.`).
+
+A whisper that draws neither an echo nor an error within 10 seconds is re-sent, up to the shared 3-try budget, so a silently swallowed whisper is retried instead of stalling the run's bookkeeping.
+
+## Sending at the server's maximum
+
+The server rate-limits whispers with a token bucket (observed live: about 10 whispers of burst, then one yellow error per dropped message, refilling at under 1 per second). The queue mirrors that bucket client-side: the first 8 whispers go out instantly, then each further whisper is sent at the exact moment a token matures — timer-scheduled, never polled. That is the maximum sustainable rate that never provokes the server.
+
+Because the refill rate is undocumented, the queue calibrates itself: a cap verdict halves the learned rate, a clean oversized run nudges it up, and the learned value is saved across sessions. Over a few runs it converges on the server's true limit and stays just under it. Unreachable targets (offline, ignoring you, wrong faction) don't count against a clean run, so they can't block the recovery. `/wta rate` shows the current value and `/wta rate reset` restores the default.
+
+If the cap trips anyway, the queue takes a hard 10 second break, then risks a single probe whisper instead of blasting blind: the probe's echo proves the cap lifted and releases the rest, while another cap error costs only that one whisper and starts the next pause. Failed probes rotate to the back so no single whisper eats the risk.
+
+No whisper is abandoned while the cap is closed: probe attempts never count against a whisper's retry budget, only swallows during a provably open cap do (3 of those and it's abandoned with a chat notice). If the server refuses every probe for about 3 minutes straight, the run aborts with a clear message. All commands share this cycle, `/rr` included, and undeliverable `/rr` replies go back on the unanswered list either way, so the next `/rr` picks those people up again — a reply is deferred, never lost.
+
+## Server-side blocking, covered
+
+The addon watches the system chat for every way the server can refuse a whisper, matching the client's own message strings first (locale-proof) with the verified English wording as fallback: the whisper cap, the free-trial tell limit (treated as the same cap), offline targets, players ignoring you, and wrong-faction targets. Unreachable people are removed from the run instead of retried, and the repeating yellow cap error is hidden while a run handles it. Late echoes are matched by their exact text, so a message the server delivers after the addon moved on can never corrupt the `/rr` bookkeeping.
 
 ## Chat feedback
 
-Every `/ww` run prints a short summary to your chat frame: how many of your `/who` results are being whispered and how many were skipped.
+Every stage of a run reports to your chat frame in the addon's colors: green for progress, red for problems, blue for cooldown status.
+
+| Moment | Line |
+|---|---|
+| Run starts | `Whispering 20 of 34 /who results, 14 skipped (...)` |
+| Burst budget spent | `Burst budget spent. Pacing the remaining 12 at 0.80/s so the server keeps accepting.` |
+| Cap trips | `Whisper cap hit. 16 of 20 delivered so far, slowing to 0.40/s and pausing 10s.` |
+| Pause ends | `Probing with Playername, 5 waiting.` |
+| Probe swallowed | `Still capped. 5 waiting, pausing another 10s.` |
+| Probe delivered | `Cap lifted. 5 whispers to go.` |
+| Queuing during the pause | `Cap active. 5 queued until the server accepts again.` |
+| Target unreachable | `Skipping Playername. Unreachable, removed from this run.` |
+| Retries exhausted | `Gave up on whispering Playername after 3 tries.` |
+| Run ends, all confirmed | `Delivered all 20 whispers.` |
+| Run ends with losses | `18 delivered, 1 unreachable, 1 failed of 20 whispers.` |
 
 If no recipients are eligible (everyone got filtered out), you'll see a single line saying so along with the skip breakdown — useful for working out which flag is being too aggressive.
 
 ## Chat colour
 
-Incoming whispers are recoloured to a softer blend of your outgoing whisper colour, so both sides of a conversation read consistently. The `[Whisper Them All]` tag on the addon's own status lines uses that same colour.
+Incoming whispers are recoloured to a softer blend of your outgoing whisper colour, so both sides of a conversation read consistently. The addon's own status lines carry a yellow `[WhisperThemAll]` tag.

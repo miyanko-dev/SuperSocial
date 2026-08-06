@@ -13,10 +13,12 @@ local function trim(s)
     return (s or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
+local IGNORE_DAYS = 30 -- Ignore entries older than this age out, so the list can't grow without bound.
+
 local function loadSkip()
     WhisperThemAllDB = WhisperThemAllDB or {}
 
-    -- One account-wide ignore list shared by every character.
+    -- One account-wide ignore list shared by every character: lowercased name -> time added.
     local bucket = WhisperThemAllDB.ignoredAccount or {}
     WhisperThemAllDB.ignoredAccount = bucket
 
@@ -36,6 +38,29 @@ local function loadSkip()
             bucket[name] = true
         end
         WhisperThemAllDB.ignored = nil
+    end
+
+    -- Migrate display-cased keys and bare `true` flags to lowercased keys with timestamps, collected first because pairs forbids adding keys mid-scan.
+    local now = time()
+    local fixes
+    for name, stamp in pairs(bucket) do
+        if stamp == true or name:lower() ~= name then
+            fixes = fixes or {}
+            fixes[name] = (stamp == true) and now or stamp
+        end
+    end
+    if fixes then
+        for name, stamp in pairs(fixes) do
+            local key = name:lower()
+            bucket[name] = nil
+            if not bucket[key] or stamp > bucket[key] then bucket[key] = stamp end
+        end
+    end
+
+    -- Age out stale entries.
+    local cutoff = now - IGNORE_DAYS * 86400
+    for name, stamp in pairs(bucket) do
+        if stamp < cutoff then bucket[name] = nil end
     end
 
     return bucket
@@ -182,12 +207,16 @@ local function whisperTarget(input)
         fail("Blocked.", targetName .. " is on the block list. /wta -unblock " .. targetName .. " removes them.")
         return
     end
+    -- Through the queue for cap rescue, flagged personal so /rr treats it as an answer, not a blast.
     for _, part in ipairs(parts) do
-        SendChatMessage(part, "WHISPER", nil, targetName)
+        ns.QueueWhisper(part, targetName, "personal")
     end
     ok("Whispered", targetName .. ".")
-    if useSkip then loadSkip()[targetName] = true end
+    if useSkip then loadSkip()[targetName:lower()] = time() end
 end
+
+-- Every flag parseFlags understands, used to catch one misplaced after the message.
+local FLAG_WORDS = { ["-limit"] = true, ["-skip"] = true, ["-only"] = true, ["-ignore"] = true, ["-cd"] = true, ["-wait"] = true }
 
 local function parseFlags(input)
     local tokens = {}
@@ -212,6 +241,10 @@ local function parseFlags(input)
             local minutes = value and tonumber(value)
             if minutes and minutes > 0 then
                 opts.cooldownSeconds = math.floor(minutes * 60)
+                cursor = cursor + 2
+            elseif value and value:match("^%d") then
+                -- A digit-led token that isn't a positive number is a typo ("3o", "0"), not message text.
+                opts.cdError = value
                 cursor = cursor + 2
             else
                 cursor = cursor + 1
@@ -246,6 +279,14 @@ local function parseFlags(input)
     local words = {}
     for i = cursor, #tokens do words[#words + 1] = tokens[i] end
     opts.text = table.concat(words, " ")
+
+    -- A known flag inside the message is a misplaced flag, not text to whisper; flags only parse before the message.
+    for _, word in ipairs(words) do
+        if FLAG_WORDS[word:lower()] then
+            opts.flagError = word
+            break
+        end
+    end
 
     -- A message of only semicolons splits to nothing; treat it as empty so the usage checks catch it.
     if #ns.SplitWhisper(opts.text) == 0 then opts.text = "" end
@@ -319,7 +360,7 @@ local function dispatchWho(opts)
                 skippedFilter = skippedFilter + 1
             elseif not isIncluded(whoInfo, opts.includeTerms) then
                 skippedFilter = skippedFilter + 1
-            elseif skip and skip[fullName] then
+            elseif skip and skip[fullName:lower()] then
                 skippedSkip = skippedSkip + 1
             elseif cooldownBucket and not isCool(cooldownBucket, fullName, opts.cooldownSeconds) then
                 skippedCool = skippedCool + 1
@@ -366,14 +407,14 @@ local function dispatchWho(opts)
         return line
     end
 
-    -- Summary first, so it leads the outgoing whisper lines; the queue then trickles them out under the chat throttle.
+    -- Summary first, so it leads the outgoing whisper lines; the queue confirms delivery by the server's echoes.
     status(summarize(tint("sent", "Whispering " .. sendCount)) .. ".")
     local sentNames = {}
     for i = 1, sendCount do
         local fullName = eligible[i]
         ns.QueueWhisper(opts.text, fullName)
         sentNames[#sentNames + 1] = fullName
-        if skip then skip[fullName] = true end
+        if skip then skip[fullName:lower()] = time() end
         -- Only a timed -cd records new recipients; bare -cd just reads the list.
         if cooldownBucket and cooldownMinutes then cooldownBucket[fullName] = time() end
     end
@@ -408,6 +449,14 @@ local function whisperWho(input)
         fail("-limit needs a number.", "e.g. /ww -limit 10 LFM SM live.")
         return
     end
+    if opts.cdError then
+        fail("-cd needs minutes as a number.", "\"" .. opts.cdError .. "\" isn't one. e.g. /ww -cd 30 WTB Black Lotus.")
+        return
+    end
+    if opts.flagError then
+        fail("Flags go before the message.", opts.flagError .. " would have been whispered as text. e.g. /ww -limit 10 LFM SM live.")
+        return
+    end
     if not opts.text or opts.text == "" then
         note("Usage: /ww MESSAGE — whisper everyone in your current /who results. e.g. /ww LFM SM live. Type /wta for all options.")
         return
@@ -440,6 +489,14 @@ local function whisperSellers(input)
     local opts = parseFlags(trim(input))
     if opts.limitError then
         fail("-limit needs a number.", "e.g. /ws -limit 10 still selling?")
+        return
+    end
+    if opts.cdError then
+        fail("-cd needs minutes as a number.", "\"" .. opts.cdError .. "\" isn't one. e.g. /ws -cd 30 still selling?")
+        return
+    end
+    if opts.flagError then
+        fail("Flags go before the message.", opts.flagError .. " would have been whispered as text. e.g. /ws -limit 10 still selling?")
         return
     end
     -- Sellers carry no class or zone, so the term filters can't apply here.
@@ -478,7 +535,7 @@ local function whisperSellers(input)
     for _, sellerName in ipairs(names) do
         if isBlocked(blocked, sellerName) then
             skippedBlocked = skippedBlocked + 1
-        elseif skip and skip[sellerName] then
+        elseif skip and skip[sellerName:lower()] then
             skippedSkip = skippedSkip + 1
         elseif cooldownBucket and not isCool(cooldownBucket, sellerName, opts.cooldownSeconds) then
             skippedCool = skippedCool + 1
@@ -524,7 +581,7 @@ local function whisperSellers(input)
     for i = 1, sendCount do
         local sellerName = eligible[i]
         ns.QueueWhisper(opts.text, sellerName)
-        if skip then skip[sellerName] = true end
+        if skip then skip[sellerName:lower()] = time() end
         -- Only a timed -cd records new recipients; bare -cd just reads the list.
         if cooldownBucket and cooldownMinutes then cooldownBucket[sellerName] = time() end
     end
@@ -582,11 +639,12 @@ local function ignoreName(name)
     end
     local skip = loadSkip()
     local shown = displayName(name)
-    if skip[shown] then
+    local key = name:lower()
+    if skip[key] then
         note(shown .. " is already on the ignore list.")
         return
     end
-    skip[shown] = true
+    skip[key] = time()
     ok("Ignoring", shown .. ". Sends with -ignore skip them. /wta -ignore clear empties the list.")
 end
 
@@ -616,6 +674,10 @@ local function adminCommand(input)
         ok("Cooldown history cleared.")
     elseif input:match("^%-cd") then
         note("Usage: /wta -cd clear — empty the cooldown history.")
+    elseif input == "rate" then
+        note("Sending at " .. string.format("%.2f", ns.PacingRate()) .. " whispers per second, learned from the server. /wta rate reset restores the default.")
+    elseif input == "rate reset" then
+        ok("Rate reset.", "Sending at " .. string.format("%.2f", ns.ResetPacingRate()) .. "/s until the server teaches otherwise.")
     elseif input == "stop" then
         local sent, dropped = ns.CancelQueue()
         if sent == 0 and dropped == 0 then
@@ -623,6 +685,8 @@ local function adminCommand(input)
         else
             ok("Stopped.", sent .. " sent, " .. dropped .. " " .. plural(dropped, "whisper", "whispers") .. " cancelled.")
         end
+    else
+        fail("Unknown command.", "\"" .. raw .. "\" isn't one. /wta opens the reference window.")
     end
 end
 

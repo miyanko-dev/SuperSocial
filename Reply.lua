@@ -7,18 +7,25 @@ local fail = ns.Fail
 local note = ns.Note
 local plural = ns.Plural
 
--- /rr replies to everyone whispered via /ww who has whispered back and hasn't been answered yet. /ww recipients accumulate across blasts; the listener below marks their replies as pending and clears them again on any outgoing whisper. Personal answers — an /rr or a manual whisper — are sticky: further whispers from that person won't re-queue them. Only a fresh /ww that includes them starts a new exchange. Tracking is session-only.
+-- /rr replies to everyone whispered via /ww who has whispered back and hasn't been answered yet. /ww recipients accumulate across blasts; the listener below marks their replies as pending and the queue reports every outgoing whisper via ns.OnWhisperDelivered. Personal answers — an /rr or a manual whisper — are sticky: further whispers from that person won't re-queue them. Only a fresh /ww that includes them starts a new exchange. Tracking is session-only.
 local whisperedByShort = {}  -- short name -> the full "Name-Realm" we whispered
 local pendingReplyAt = {}    -- short name -> time of their still-unanswered reply
 local answeredByShort = {}   -- short name -> true once answered; a fresh /ww clears it
 
--- Whispers the queue sends are blasts, not personal answers: the listener clears pending for them without turning sticky. Counted per name because back-to-back runs can queue the same person twice.
-local blastOutgoing = {}
-
-function ns.MarkBlastWhisper(fullName)
+-- A reply the queue couldn't deliver goes back on the unanswered list, so the next /rr picks that person up again.
+function ns.ReopenReply(fullName)
     local short = ns.NameOnly(fullName)
-    if not short then return end
-    blastOutgoing[short] = (blastOutgoing[short] or 0) + 1
+    if not (short and whisperedByShort[short]) then return end
+    answeredByShort[short] = nil
+    pendingReplyAt[short] = time()
+end
+
+-- The queue classifies every outgoing whisper and reports it here, so ownership is never inferred from a counter. A blast clears their pending reply; only a personal whisper answers them for good.
+function ns.OnWhisperDelivered(fullName, personal)
+    local short = ns.NameOnly(fullName)
+    if not (short and whisperedByShort[short]) then return end
+    pendingReplyAt[short] = nil
+    if personal then answeredByShort[short] = true end
 end
 
 -- Called by /ww after a send: recipients accumulate across blasts. A fresh blast re-arms anyone /rr already answered — new solicitation, new exchange.
@@ -38,7 +45,6 @@ local function replyRecent(input)
         wipe(whisperedByShort)
         wipe(pendingReplyAt)
         wipe(answeredByShort)
-        wipe(blastOutgoing)
         ok("Reply tracking reset.", "Run /ww, then /rr replies to whoever whispers back.")
         return
     end
@@ -46,6 +52,10 @@ local function replyRecent(input)
     local opts = ns.ParseFlags(input)
     if opts.limitError then
         fail("-limit needs a number.", "e.g. /rr -limit 5 invite incoming.")
+        return
+    end
+    if opts.flagError then
+        fail("Flags go before the message.", opts.flagError .. " would have been whispered as text. e.g. /rr -limit 5 invite incoming.")
         return
     end
     if opts.useCooldown then
@@ -127,35 +137,24 @@ local function replyRecent(input)
     status(summarize(tint("sent", "Replying to " .. sendCount)) .. ".")
     for i = 1, sendCount do
         local fullName = eligible[i]
-        ns.QueueWhisper(opts.text, fullName)
+        ns.QueueWhisper(opts.text, fullName, "reply")
 
-        -- Answered by /rr is sticky, so their follow-up whispers won't re-queue them. Clear pending eagerly too: the INFORM event also does it, but the queue trickles.
+        -- Answered by /rr is sticky, so their follow-up whispers won't re-queue them. Clear pending eagerly too; a reply the queue fails to deliver reopens via ns.ReopenReply.
         local short = ns.NameOnly(fullName)
         answeredByShort[short] = true
         pendingReplyAt[short] = nil
     end
 end
 
--- Track both directions for /ww recipients: an incoming whisper marks a pending reply, any outgoing whisper to them clears it. Queued blasts stop there; a manual whisper also answers them for good, like an /rr reply.
+-- Incoming half of the tracking: a /ww recipient writing back becomes a pending reply. The outgoing half arrives via ns.OnWhisperDelivered, so only one place ever classifies a whisper.
 local listener = CreateFrame("Frame")
 listener:RegisterEvent("CHAT_MSG_WHISPER")
-listener:RegisterEvent("CHAT_MSG_WHISPER_INFORM")
-listener:SetScript("OnEvent", function(_, event, _, otherParty)
+listener:SetScript("OnEvent", function(_, _, _, otherParty)
     local short = ns.NameOnly(otherParty)
     if not (short and whisperedByShort[short]) then return end
-    if event == "CHAT_MSG_WHISPER" then
-        -- Once answered, follow-up whispers don't re-queue them.
-        if not answeredByShort[short] then
-            pendingReplyAt[short] = time()
-        end
-    else
-        pendingReplyAt[short] = nil
-        local blasts = blastOutgoing[short]
-        if blasts then
-            blastOutgoing[short] = blasts > 1 and blasts - 1 or nil
-        else
-            answeredByShort[short] = true
-        end
+    -- Once answered, follow-up whispers don't re-queue them.
+    if not answeredByShort[short] then
+        pendingReplyAt[short] = time()
     end
 end)
 
