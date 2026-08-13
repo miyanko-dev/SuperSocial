@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- A scrollable reference panel for every command and option, opened with "/wta" or the minimap button. Styled after the Target Finder panel so the two addons read as one family: dialog-box backdrop, header banner, and bordered section containers.
+-- A scrollable reference panel for every command and option, opened with "/wta". Styled after the Target Finder panel so the two addons read as one family: dialog-box backdrop, header banner, and bordered section containers.
 
 local PANEL_WIDTH = 480
 local PANEL_HEIGHT = 580

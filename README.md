@@ -128,10 +128,6 @@ A `;` splits the message: each recipient gets the part before it and the part af
 | `/wta -block list` | Show everyone on the block list. |
 | `/wta -unblock NAME` | Remove a player from the block list. |
 
-## Minimap button
-
-A minimap button (LibDBIcon) toggles the command reference panel on left-click — the same panel `/wta` opens. Drag it around the minimap edge to reposition; the spot is saved account-wide.
-
 ## Confirmed delivery
 
 Every delivered whisper is echoed back by the server itself (the `To Name: ...` line). The addon counts those echoes, so its closing line is a real delivery confirmation, not a guess: `Delivered all 20 whispers.` prints only when every whisper of the run was confirmed by the server, and a run with losses closes with the honest split (`18 delivered, 1 unreachable, 1 failed of 20 whispers.`).
