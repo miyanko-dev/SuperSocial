@@ -104,7 +104,7 @@ local SHORTCUTS = {
     {
         cmd = ns.ModifierLabels.whisper,
         desc = "Whisper the player: a chat name opens its own whisper tab, a unit frame presets the chat box.",
-        eg = "Ctrl-click a name in chat",
+        eg = ns.ModifierLabels.whisper .. " a name in chat",
     },
     {
         cmd = ns.ModifierLabels.invite,
@@ -317,7 +317,7 @@ local function buildFrame()
     local y = 4
     y = y + buildNote(content, y, width, INTRO) + SECTION_GAP
 
-    local withExample = function(e) return e.desc .. "\n" .. exampleLine(e.eg) end
+    local function withExample(e) return e.desc .. "\n" .. exampleLine(e.eg) end
 
     local sections = {
         { label = "Commands", entries = COMMANDS, describe = withExample },
