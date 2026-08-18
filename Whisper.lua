@@ -16,28 +16,28 @@ end
 local IGNORE_DAYS = 30 -- Ignore entries older than this age out, so the list can't grow without bound.
 
 local function loadSkip()
-    WhisperThemAllDB = WhisperThemAllDB or {}
+    SuperSocialDB = SuperSocialDB or {}
 
     -- One account-wide ignore list shared by every character: lowercased name -> time added.
-    local bucket = WhisperThemAllDB.ignoredAccount or {}
-    WhisperThemAllDB.ignoredAccount = bucket
+    local bucket = SuperSocialDB.ignoredAccount or {}
+    SuperSocialDB.ignoredAccount = bucket
 
     -- Migrate per-character buckets into the shared list.
-    if WhisperThemAllDB.ignoredByChar then
-        for _, charBucket in pairs(WhisperThemAllDB.ignoredByChar) do
+    if SuperSocialDB.ignoredByChar then
+        for _, charBucket in pairs(SuperSocialDB.ignoredByChar) do
             for name in pairs(charBucket) do
                 bucket[name] = true
             end
         end
-        WhisperThemAllDB.ignoredByChar = nil
+        SuperSocialDB.ignoredByChar = nil
     end
 
     -- Migrate the pre-per-char flat list as well.
-    if WhisperThemAllDB.ignored then
-        for name in pairs(WhisperThemAllDB.ignored) do
+    if SuperSocialDB.ignored then
+        for name in pairs(SuperSocialDB.ignored) do
             bucket[name] = true
         end
-        WhisperThemAllDB.ignored = nil
+        SuperSocialDB.ignored = nil
     end
 
     -- Migrate display-cased keys and bare `true` flags to lowercased keys with timestamps, collected first because pairs forbids adding keys mid-scan.
@@ -71,31 +71,31 @@ local function clearSkip()
 end
 
 local function loadBlocked()
-    WhisperThemAllDB = WhisperThemAllDB or {}
+    SuperSocialDB = SuperSocialDB or {}
 
     -- Permanent, account-wide block list: keys are lowercased names so lookups ignore capitalization, values keep the name as shown in chat.
-    local bucket = WhisperThemAllDB.blockedAccount or {}
-    WhisperThemAllDB.blockedAccount = bucket
+    local bucket = SuperSocialDB.blockedAccount or {}
+    SuperSocialDB.blockedAccount = bucket
     return bucket
 end
 
 local function loadCooldowns()
-    WhisperThemAllDB = WhisperThemAllDB or {}
+    SuperSocialDB = SuperSocialDB or {}
 
     -- One account-wide cooldown list shared by every character, like the ignore list — a relog onto an alt keeps everyone's cooldown running.
-    local bucket = WhisperThemAllDB.cooldownAccount or {}
-    WhisperThemAllDB.cooldownAccount = bucket
+    local bucket = SuperSocialDB.cooldownAccount or {}
+    SuperSocialDB.cooldownAccount = bucket
 
     -- Migrate per-character buckets, keeping the newest timestamp per name.
-    if WhisperThemAllDB.cooldownByChar then
-        for _, charBucket in pairs(WhisperThemAllDB.cooldownByChar) do
+    if SuperSocialDB.cooldownByChar then
+        for _, charBucket in pairs(SuperSocialDB.cooldownByChar) do
             for name, ts in pairs(charBucket) do
                 if not bucket[name] or ts > bucket[name] then
                     bucket[name] = ts
                 end
             end
         end
-        WhisperThemAllDB.cooldownByChar = nil
+        SuperSocialDB.cooldownByChar = nil
     end
 
     return bucket
@@ -204,7 +204,7 @@ local function whisperTarget(input)
     end
     local targetName = UnitName("target")
     if isBlocked(loadBlocked(), targetName) then
-        fail("Blocked.", targetName .. " is on the block list. /wta -unblock " .. targetName .. " removes them.")
+        fail("Blocked.", targetName .. " is on the block list. /ss -unblock " .. targetName .. " removes them.")
         return
     end
     -- Through the queue for cap rescue, flagged personal so /rr treats it as an answer, not a blast.
@@ -458,7 +458,7 @@ local function whisperWho(input)
         return
     end
     if not opts.text or opts.text == "" then
-        note("Usage: /ww MESSAGE — whisper everyone in your current /who results. e.g. /ww LFM SM live. Type /wta for all options.")
+        note("Usage: /ww MESSAGE — whisper everyone in your current /who results. e.g. /ww LFM SM live. Type /ss for all options.")
         return
     end
     if opts.wait then
@@ -598,7 +598,7 @@ local function listBlocked()
         names[#names + 1] = shown
     end
     if #names == 0 then
-        note("Block list is empty. /wta -block NAME adds someone.")
+        note("Block list is empty. /ss -block NAME adds someone.")
         return
     end
     table.sort(names)
@@ -607,7 +607,7 @@ end
 
 local function blockName(name)
     if name:find("%s") then
-        fail("One name at a time.", "e.g. /wta -block Thrall.")
+        fail("One name at a time.", "e.g. /ss -block Thrall.")
         return
     end
     local blocked = loadBlocked()
@@ -617,7 +617,7 @@ local function blockName(name)
         return
     end
     blocked[key] = displayName(name)
-    ok("Blocked", blocked[key] .. ". No command will whisper them. /wta -unblock " .. blocked[key] .. " undoes it.")
+    ok("Blocked", blocked[key] .. ". No command will whisper them. /ss -unblock " .. blocked[key] .. " undoes it.")
 end
 
 local function unblockName(name)
@@ -634,7 +634,7 @@ end
 
 local function ignoreName(name)
     if name:find("%s") then
-        fail("One name at a time.", "e.g. /wta -ignore Thrall.")
+        fail("One name at a time.", "e.g. /ss -ignore Thrall.")
         return
     end
     local skip = loadSkip()
@@ -645,7 +645,7 @@ local function ignoreName(name)
         return
     end
     skip[key] = time()
-    ok("Ignoring", shown .. ". Sends with -ignore skip them. /wta -ignore clear empties the list.")
+    ok("Ignoring", shown .. ". Sends with -ignore skip them. /ss -ignore clear empties the list.")
 end
 
 local function adminCommand(input)
@@ -659,11 +659,11 @@ local function adminCommand(input)
     elseif input:match("^%-block%s") then
         blockName(trim(raw:match("^%S+%s+(.*)$")))
     elseif input == "-unblock" then
-        note("Usage: /wta -unblock NAME — remove a player from the block list.")
+        note("Usage: /ss -unblock NAME — remove a player from the block list.")
     elseif input:match("^%-unblock%s") then
         unblockName(trim(raw:match("^%S+%s+(.*)$")))
     elseif input == "-ignore" then
-        note("Usage: /wta -ignore NAME — add a player to the ignore list, or /wta -ignore clear to empty it.")
+        note("Usage: /ss -ignore NAME — add a player to the ignore list, or /ss -ignore clear to empty it.")
     elseif input == "-ignore clear" then
         clearSkip()
         ok("Ignore list cleared.")
@@ -673,9 +673,9 @@ local function adminCommand(input)
         clearCooldowns()
         ok("Cooldown history cleared.")
     elseif input:match("^%-cd") then
-        note("Usage: /wta -cd clear — empty the cooldown history.")
+        note("Usage: /ss -cd clear — empty the cooldown history.")
     elseif input == "rate" then
-        note("Sending at " .. string.format("%.2f", ns.PacingRate()) .. " whispers per second, learned from the server. /wta rate reset restores the default.")
+        note("Sending at " .. string.format("%.2f", ns.PacingRate()) .. " whispers per second, learned from the server. /ss rate reset restores the default.")
     elseif input == "rate reset" then
         ok("Rate reset.", "Sending at " .. string.format("%.2f", ns.ResetPacingRate()) .. "/s until the server teaches otherwise.")
     elseif input == "stop" then
@@ -686,7 +686,7 @@ local function adminCommand(input)
             ok("Stopped.", sent .. " sent, " .. dropped .. " " .. plural(dropped, "whisper", "whispers") .. " cancelled.")
         end
     else
-        fail("Unknown command.", "\"" .. raw .. "\" isn't one. /wta opens the reference window.")
+        fail("Unknown command.", "\"" .. raw .. "\" isn't one. /ss opens the reference window.")
     end
 end
 
@@ -719,5 +719,5 @@ SlashCmdList["WHISPERWHO"] = whisperWho
 SLASH_WHISPERSELLERS1 = "/ws"
 SlashCmdList["WHISPERSELLERS"] = whisperSellers
 
-SLASH_WHISPERTHEMALLADMIN1 = "/wta"
-SlashCmdList["WHISPERTHEMALLADMIN"] = adminCommand
+SLASH_SUPERSOCIAL1 = "/ss"
+SlashCmdList["SUPERSOCIAL"] = adminCommand

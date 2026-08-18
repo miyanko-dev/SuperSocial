@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- One place for every WhisperThemAll chat line: a yellow prefix, plain white text, and three status colours for the lead word of each message.
+-- One place for every Super Social chat line: a yellow prefix, plain white text, and three status colours for the lead word of each message.
 local COLORS = {
     sent = "ff40ff40", -- green — positive: whispers sent, actions completed
     skip = "ffff4040", -- red   — negative: errors, skips, empty results
@@ -14,7 +14,7 @@ end
 
 -- One status line per event: the addon tag, then the whole summary. Inline status colours in `text` carry their own codes and show through.
 local function status(text)
-    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00[WhisperThemAll]:|r " .. text)
+    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00[Super Social]:|r " .. text)
 end
 
 -- Every confirmation line is a colour-tinted lead phrase plus optional plain detail, so the shape and colour-by-meaning stay identical everywhere. Callers pick a builder by intent instead of assembling colours by hand.

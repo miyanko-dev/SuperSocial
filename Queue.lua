@@ -55,18 +55,18 @@ end
 
 -- The learned refill rate lives in the saved variables, so calibration survives reloads and sessions.
 local function pacingRate()
-    WhisperThemAllDB = WhisperThemAllDB or {}
-    local rate = tonumber(WhisperThemAllDB.sendRate)
+    SuperSocialDB = SuperSocialDB or {}
+    local rate = tonumber(SuperSocialDB.sendRate)
     if not rate or rate < RATE_FLOOR or rate > RATE_CEIL then rate = RATE_DEFAULT end
     return rate
 end
 
 local function setPacingRate(rate)
-    WhisperThemAllDB = WhisperThemAllDB or {}
-    WhisperThemAllDB.sendRate = math.max(RATE_FLOOR, math.min(RATE_CEIL, rate))
+    SuperSocialDB = SuperSocialDB or {}
+    SuperSocialDB.sendRate = math.max(RATE_FLOOR, math.min(RATE_CEIL, rate))
 end
 
--- /wta reads and resets the learned rate through these, so a stale calibration is inspectable and curable in game.
+-- /ss reads and resets the learned rate through these, so a stale calibration is inspectable and curable in game.
 function ns.PacingRate()
     return pacingRate()
 end

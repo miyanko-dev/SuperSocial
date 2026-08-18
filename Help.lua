@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- A scrollable reference panel for every command and option, opened with "/wta". Styled after the Target Finder panel so the two addons read as one family: dialog-box backdrop, header banner, and bordered section containers.
+-- A scrollable reference panel for every command and option, opened with "/ss". Styled after the Target Finder panel so the two addons read as one family: dialog-box backdrop, header banner, and bordered section containers.
 
 local PANEL_WIDTH = 480
 local PANEL_HEIGHT = 580
@@ -17,10 +17,11 @@ local ROW_GAP = 10
 
 local YELLOW = "|cffffd200"
 
--- The panel is three sections: the slash commands, the /wta management subcommands, then the flags that refine /ww. "cmd" is the yellow left-column label; "eg" carries the full worked example so the column stays scannable.
+-- The panel is four sections: the slash commands, the modifier-click shortcuts, the /ss management subcommands, then the flags that refine /ww. "cmd" is the yellow left-column label; "eg" carries the full worked example so the column stays scannable.
 local INTRO =
     "Run /who, then /ww whispers everyone in the results — that's the core idea. "
-    .. "The flags below refine who hears it, and they stack in any order before the message."
+    .. "The flags below refine who hears it, and they stack in any order before the message. "
+    .. "Modifier-clicking a player name anywhere in the UI whispers, invites, or friends them."
 
 local COMMANDS = {
     {
@@ -44,59 +45,83 @@ local COMMANDS = {
         eg = "/rr invite incoming, whisper me",
     },
     {
-        cmd = "/wta",
+        cmd = "/ss",
         desc = "Open this reference panel.",
-        eg = "/wta",
+        eg = "/ss",
     },
 }
 
 local MANAGE = {
     {
-        cmd = "/wta stop",
+        cmd = "/ss stop",
         desc = "Cancel any whispers still queued to send.",
-        eg = "/wta stop",
+        eg = "/ss stop",
     },
     {
-        cmd = "/wta rate",
+        cmd = "/ss rate",
         desc = "Show the learned send rate in whispers per second.",
-        eg = "/wta rate",
+        eg = "/ss rate",
     },
     {
-        cmd = "/wta rate reset",
+        cmd = "/ss rate reset",
         desc = "Restore the default send rate; the server re-teaches it from there.",
-        eg = "/wta rate reset",
+        eg = "/ss rate reset",
     },
     {
-        cmd = "/wta -ignore NAME",
+        cmd = "/ss -ignore NAME",
         desc = "Add a player to the ignore list by hand — the same list -ignore sends build.",
-        eg = "/wta -ignore Thrall",
+        eg = "/ss -ignore Thrall",
     },
     {
-        cmd = "/wta -ignore clear",
+        cmd = "/ss -ignore clear",
         desc = "Empty the ignore list.",
-        eg = "/wta -ignore clear",
+        eg = "/ss -ignore clear",
     },
     {
-        cmd = "/wta -cd clear",
+        cmd = "/ss -cd clear",
         desc = "Empty the cooldown history.",
-        eg = "/wta -cd clear",
+        eg = "/ss -cd clear",
     },
     {
-        cmd = "/wta -block NAME",
-        desc = "Block a player for good: no command ever whispers them. Account-wide; /wta -ignore clear leaves it alone.",
-        eg = "/wta -block Thrall",
+        cmd = "/ss -block NAME",
+        desc = "Block a player for good: no command ever whispers them. Account-wide; /ss -ignore clear leaves it alone.",
+        eg = "/ss -block Thrall",
     },
     {
-        cmd = "/wta -block list",
+        cmd = "/ss -block list",
         desc = "Show everyone on the block list.",
-        eg = "/wta -block list",
+        eg = "/ss -block list",
     },
     {
-        cmd = "/wta -unblock NAME",
+        cmd = "/ss -unblock NAME",
         desc = "Remove a player from the block list.",
-        eg = "/wta -unblock Thrall",
+        eg = "/ss -unblock Thrall",
     },
 }
+
+-- Left column names the keys of the client this runs on, so a Mac never reads Windows modifiers.
+local SHORTCUTS = {
+    {
+        cmd = ns.ModifierLabels.whisper,
+        desc = "Whisper the player: a chat name opens its own whisper tab, a unit frame presets the chat box.",
+        eg = "Ctrl-click a name in chat",
+    },
+    {
+        cmd = ns.ModifierLabels.invite,
+        desc = "Invite the player to your group.",
+        eg = ns.ModifierLabels.invite .. " a raid frame",
+    },
+    {
+        cmd = ns.ModifierLabels.friend,
+        desc = "Add the player to your friends list.",
+        eg = ns.ModifierLabels.friend .. " a /who result",
+    },
+}
+
+local SHORTCUT_TARGETS =
+    "Shortcuts work on chat names, the target and target-of-target frames, party and raid frames, "
+    .. "the friends, who and guild lists, and LFG browse entries (acting on the group leader). "
+    .. "Plain clicks keep their default behavior, and no shortcut ever fires on yourself or an NPC."
 
 local FLAGS = {
     {
@@ -120,7 +145,7 @@ local FLAGS = {
     {
         cmd = "-ignore",
         on = "/ww, /wt, /ws",
-        desc = "Skip anyone on the ignore list, then add the people you whisper to it. Survives reloads, entries age out after 30 days; clear with /wta -ignore clear.",
+        desc = "Skip anyone on the ignore list, then add the people you whisper to it. Survives reloads, entries age out after 30 days; clear with /ss -ignore clear.",
         eg = "/ww -ignore WTS enchant mats, whisper me",
     },
     {
@@ -255,7 +280,7 @@ end
 local helpFrame
 
 local function buildFrame()
-    local panel = CreateFrame("Frame", "WhisperThemAllHelpFrame", UIParent, "BackdropTemplate")
+    local panel = CreateFrame("Frame", "SuperSocialHelpFrame", UIParent, "BackdropTemplate")
     panel:SetSize(PANEL_WIDTH, PANEL_HEIGHT)
     panel:SetPoint("CENTER")
     panel:SetFrameStrata("DIALOG")
@@ -273,14 +298,14 @@ local function buildFrame()
         edgeSize = 32,
         insets = { left = 8, right = 8, top = 8, bottom = 8 },
     })
-    tinsert(UISpecialFrames, "WhisperThemAllHelpFrame")
+    tinsert(UISpecialFrames, "SuperSocialHelpFrame")
 
-    buildTitleHeader(panel, "Whisper Them All")
+    buildTitleHeader(panel, "Super Social")
 
     local cornerClose = CreateFrame("Button", nil, panel, "UIPanelCloseButton")
     cornerClose:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -6, -6)
 
-    local scroll = CreateFrame("ScrollFrame", "WhisperThemAllHelpScroll", panel, "UIPanelScrollFrameTemplate")
+    local scroll = CreateFrame("ScrollFrame", "SuperSocialHelpScroll", panel, "UIPanelScrollFrameTemplate")
     scroll:SetPoint("TOPLEFT", PANEL_PAD, -PANEL_PAD_TOP)
     scroll:SetPoint("BOTTOMRIGHT", -PANEL_PAD - SCROLLBAR_GUTTER, PANEL_PAD_BOTTOM)
 
@@ -292,16 +317,24 @@ local function buildFrame()
     local y = 4
     y = y + buildNote(content, y, width, INTRO) + SECTION_GAP
 
+    local withExample = function(e) return e.desc .. "\n" .. exampleLine(e.eg) end
+
     local sections = {
-        { label = "Commands", entries = COMMANDS, describe = function(e) return e.desc .. "\n" .. exampleLine(e.eg) end },
-        { label = "Manage", entries = MANAGE, describe = function(e) return e.desc .. "\n" .. exampleLine(e.eg) end },
+        { label = "Commands", entries = COMMANDS, describe = withExample },
+        { label = "Shortcuts", entries = SHORTCUTS, describe = withExample, note = SHORTCUT_TARGETS },
+        { label = "Manage", entries = MANAGE, describe = withExample },
         { label = "Flags", entries = FLAGS, describe = function(e) return e.desc .. "  (" .. e.on .. ")\n" .. exampleLine(e.eg) end },
     }
     for _, spec in ipairs(sections) do
         local section = layoutSection(content, width, spec.label, spec.entries, spec.describe)
         section:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
         section:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, -y)
-        y = y + section:GetHeight() + SECTION_GAP
+        y = y + section:GetHeight()
+        -- A section note sits tight under its box, not a full section gap away.
+        if spec.note then
+            y = y + ROW_GAP + buildNote(content, y + ROW_GAP, width, spec.note)
+        end
+        y = y + SECTION_GAP
     end
 
     y = y + buildNote(content, y, width, FOOTER)

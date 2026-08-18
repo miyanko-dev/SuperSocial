@@ -1,10 +1,12 @@
-# WhisperThemAll
+# Super Social
 
-Mass-whisper and quick-reply tools for WoW Classic 1.15.x.
+Mass-whisper, quick-reply and modifier-click social tools for WoW Classic 1.15.x.
 
 ## What it does
 
 Run a `/who` search, then `/ww MESSAGE` whispers everyone in the results. That's the whole idea.
+
+On top of that, modifier-clicking any player name in the UI whispers, invites, or friends them without typing a command.
 
 ## Try it
 
@@ -52,7 +54,7 @@ Whispers only the first 10 people from your `/who` results. The same `-limit` wo
 /ww -ignore Selling enchant mats, whisper for list
 ```
 
-`-ignore` whispers everyone, then **remembers** each recipient. Run `/ww -ignore` again and those people are skipped. The list survives reloads and entries age out after 30 days on their own. Clear it early with `/wta -ignore clear`.
+`-ignore` whispers everyone, then **remembers** each recipient. Run `/ww -ignore` again and those people are skipped. The list survives reloads and entries age out after 30 days on their own. Clear it early with `/ss -ignore clear`.
 
 Use `-ignore` when you're pitching the same thing over a long session and want to make sure nobody hears it twice.
 
@@ -62,7 +64,7 @@ Use `-ignore` when you're pitching the same thing over a long session and want t
 /ww -cd 30 WTB Black Lotus, paying 80g
 ```
 
-`-cd 30` whispers everyone, then puts each recipient on a 30-minute cooldown. Run `/ww -cd 30` again within that window and the people you just whispered are skipped. The cooldown list is account-wide and survives reloads and relogs, so it keeps working across your characters. Cooldowns age out on their own. Clear early with `/wta -cd clear`.
+`-cd 30` whispers everyone, then puts each recipient on a 30-minute cooldown. Run `/ww -cd 30` again within that window and the people you just whispered are skipped. The cooldown list is account-wide and survives reloads and relogs, so it keeps working across your characters. Cooldowns age out on their own. Clear early with `/ss -cd clear`.
 
 Use `-cd 30` when you'll repeat the same broadcast every few minutes.
 
@@ -108,6 +110,29 @@ Up to 20 non-warlocks, on a 15-minute cooldown. Flag order doesn't matter, but f
 
 A `;` splits the message: each recipient gets the part before it and the part after it as two separate whispers, back to back. More than one `;` sends more parts. Works on `/ww`, `/wt`, `/ws`, and `/rr`, and combines with every flag.
 
+## Modifier-click shortcuts
+
+Hold a modifier and left-click a player name anywhere in the UI to act on them instantly, no command needed.
+
+| Action | Mac | Windows |
+| --- | --- | --- |
+| Whisper | Ctrl-click | Ctrl-click |
+| Invite | Cmd-click | Alt-click |
+| Add friend | Option-click | Win-click |
+
+Whispering a chat name opens that player's own whisper tab and focuses its edit box, reusing the tab if it already exists. Whispering a unit frame presets the normal chat edit box instead, because a secure click cannot open a tab without taint. Invite and add friend act immediately.
+
+Click targets:
+
+- Player names in chat
+- Target and target-of-target frames
+- Party frames
+- Raid frames and raid-style party frames
+- Friends list, who list and guild roster in the friends panel
+- Group listings in the LFG browse panel, acting on the leader
+
+Only left clicks with a modifier are handled, so plain clicks keep their default behavior. Clicks on unit frames still target the unit first, since the secure click cannot be suppressed without taint. Shortcuts never fire on yourself or on NPCs.
+
 ## Other commands
 
 | Command | What it does |
@@ -117,16 +142,16 @@ A `;` splits the message: each recipient gets the part before it and the part af
 | `/ws MESSAGE` | Whisper every seller in the auction house Browse tab. Takes `-limit N`, `-cd M`, and `-ignore` (sellers carry no class or zone, so `-skip`/`-only` don't apply). |
 | `/rr MESSAGE` | Reply to everyone whispered via `/ww` who has whispered you back and hasn't been answered yet (minus your party and raid, including anyone who was grouped with you in the last 15 minutes). Recipients accumulate across `/ww` runs, and any reply — an earlier `/rr` or a manual whisper — counts as answered, so run several `/ww` queries, then one `/rr` handles them all without whispering anyone twice. People you've answered — via `/rr` or a manual whisper — stay excluded even if they whisper again; only a fresh `/ww` that includes them starts a new exchange. Takes `-limit N` (caps to the most recent repliers). |
 | `/rr reset` or `/rr clear` | Forget all tracked `/ww` recipients and their replies. Tracking isn't saved, so a `/reload` or re-login clears it too. |
-| `/wta` | Open the command and parameter reference panel. |
-| `/wta stop` | Cancel any whispers still queued to send (reports how many went out and how many were cancelled). |
-| `/wta rate` | Show the learned send rate in whispers per second. |
-| `/wta rate reset` | Restore the default send rate; the server re-teaches it from there. |
-| `/wta -ignore NAME` | Add a player to the ignore list by hand — the same list `-ignore` sends build. |
-| `/wta -ignore clear` | Empty the ignore list. |
-| `/wta -cd clear` | Empty the cooldown history. |
-| `/wta -block NAME` | Block a player permanently: no command ever whispers them. The list is account-wide, survives reloads, and isn't touched by `/wta -ignore clear`. |
-| `/wta -block list` | Show everyone on the block list. |
-| `/wta -unblock NAME` | Remove a player from the block list. |
+| `/ss` | Open the command and parameter reference panel. |
+| `/ss stop` | Cancel any whispers still queued to send (reports how many went out and how many were cancelled). |
+| `/ss rate` | Show the learned send rate in whispers per second. |
+| `/ss rate reset` | Restore the default send rate; the server re-teaches it from there. |
+| `/ss -ignore NAME` | Add a player to the ignore list by hand — the same list `-ignore` sends build. |
+| `/ss -ignore clear` | Empty the ignore list. |
+| `/ss -cd clear` | Empty the cooldown history. |
+| `/ss -block NAME` | Block a player permanently: no command ever whispers them. The list is account-wide, survives reloads, and isn't touched by `/ss -ignore clear`. |
+| `/ss -block list` | Show everyone on the block list. |
+| `/ss -unblock NAME` | Remove a player from the block list. |
 
 ## Confirmed delivery
 
@@ -138,7 +163,7 @@ A whisper that draws neither an echo nor an error within 10 seconds is re-sent, 
 
 The server rate-limits whispers with a token bucket (observed live: about 10 whispers of burst, then one yellow error per dropped message, refilling at under 1 per second). The queue mirrors that bucket client-side: the first 8 whispers go out instantly, then each further whisper is sent at the exact moment a token matures — timer-scheduled, never polled. That is the maximum sustainable rate that never provokes the server.
 
-Because the refill rate is undocumented, the queue calibrates itself: a cap verdict halves the learned rate, a clean oversized run nudges it up, and the learned value is saved across sessions. Over a few runs it converges on the server's true limit and stays just under it. Unreachable targets (offline, ignoring you, wrong faction) don't count against a clean run, so they can't block the recovery. `/wta rate` shows the current value and `/wta rate reset` restores the default.
+Because the refill rate is undocumented, the queue calibrates itself: a cap verdict halves the learned rate, a clean oversized run nudges it up, and the learned value is saved across sessions. Over a few runs it converges on the server's true limit and stays just under it. Unreachable targets (offline, ignoring you, wrong faction) don't count against a clean run, so they can't block the recovery. `/ss rate` shows the current value and `/ss rate reset` restores the default.
 
 If the cap trips anyway, the queue takes a hard 10 second break, then risks a single probe whisper instead of blasting blind: the probe's echo proves the cap lifted and releases the rest, while another cap error costs only that one whisper and starts the next pause. Failed probes rotate to the back so no single whisper eats the risk.
 
@@ -170,4 +195,4 @@ If no recipients are eligible (everyone got filtered out), you'll see a single l
 
 ## Chat colour
 
-Incoming whispers are recoloured to a softer blend of your outgoing whisper colour, so both sides of a conversation read consistently. The addon's own status lines carry a yellow `[WhisperThemAll]` tag.
+Incoming whispers are recoloured to a softer blend of your outgoing whisper colour, so both sides of a conversation read consistently. The addon's own status lines carry a yellow `[Super Social]` tag.
