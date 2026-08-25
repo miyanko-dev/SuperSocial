@@ -103,7 +103,7 @@ local MANAGE = {
 local SHORTCUTS = {
     {
         cmd = ns.ModifierLabels.whisper,
-        desc = "Whisper the player: a chat name opens its own whisper tab, a unit frame presets the chat box.",
+        desc = "Whisper the player: chat names and list entries open a whisper tab, a unit frame presets the chat box.",
         eg = ns.ModifierLabels.whisper .. " a name in chat",
     },
     {
@@ -119,7 +119,7 @@ local SHORTCUTS = {
 }
 
 local SHORTCUT_TARGETS =
-    "Shortcuts work on chat names, the target and target-of-target frames, party and raid frames, "
+    "Shortcuts work on chat names, the target, focus and target-of-target frames, party and raid frames, "
     .. "the friends, who and guild lists, and LFG browse entries (acting on the group leader). "
     .. "Plain clicks keep their default behavior, and no shortcut ever fires on yourself or an NPC."
 
