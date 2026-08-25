@@ -2,13 +2,14 @@
 ## Title: Super Social
 ## Notes: Mass whisper, quick reply and modifier-click social shortcuts for WoW Classic 1.15.x.
 ## Author: MIYANKO
-## Version: 2.0.0
+## Version: 2.1.0
 ## IconTexture: 134149
 ## SavedVariables: SuperSocialDB
 
 Format.lua
 Queue.lua
 Shortcuts.lua
+QuestMacro.lua
 Help.lua
 Whisper.lua
 Reply.lua

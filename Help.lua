@@ -116,12 +116,18 @@ local SHORTCUTS = {
         desc = "Add the player to your friends list.",
         eg = ns.ModifierLabels.friend .. " a /who result",
     },
+    {
+        cmd = "Shift-click",
+        desc = "With the macro window open and no chat box waiting, paste a Questie tracker quest into the macro body instead of untracking it.",
+        eg = "Shift-click a tracked quest while editing a macro",
+    },
 }
 
 local SHORTCUT_TARGETS =
     "Shortcuts work on chat names, the target, focus and target-of-target frames, party and raid frames, "
     .. "the friends, who and guild lists, and LFG browse entries (acting on the group leader). "
-    .. "Plain clicks keep their default behavior, and no shortcut ever fires on yourself or an NPC."
+    .. "Plain clicks keep their default behavior, and no shortcut ever fires on yourself or an NPC. "
+    .. "The Questie paste needs the macro window open with a macro selected; an open chat box always gets the link first."
 
 local FLAGS = {
     {

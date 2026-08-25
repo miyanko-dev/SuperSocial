@@ -133,6 +133,21 @@ Click targets:
 
 Only left clicks with a modifier are handled, so plain clicks keep their default behavior. Clicks on unit frames still target the unit first, since the secure click cannot be suppressed without taint. Shortcuts never fire on yourself or on NPCs.
 
+## Paste a Questie quest into a macro
+
+Questie already pastes a quest link into an open chat box when you shift-click a quest in its tracker. This does the same for macros: open the macro window, pick a macro, then shift-click a tracked quest and its link lands in the macro body at the cursor.
+
+```
+/1 LFM [[15] The Defias Brotherhood (155)]
+```
+
+- Works on quest lines and their objective lines in the Questie tracker.
+- An open chat edit box always wins, so the normal chat paste is untouched.
+- Without the macro window open, shift-click keeps untracking the quest as before.
+- The text is exactly what Questie would paste into chat, so the quest level shows only when Questie's own "show quest level" option is on.
+- A paste that won't fit the 255 character macro limit is refused with a chat notice instead of being cut off.
+- Achievement lines are left alone.
+
 ## Other commands
 
 | Command | What it does |
