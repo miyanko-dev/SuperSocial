@@ -1,9 +1,7 @@
-local _, ns = ...
+local ADDON, ns = ...
 
 local applyingColor = false
 
-local tint = ns.Tint
-local status = ns.Status
 local ok = ns.Ok
 local fail = ns.Fail
 local note = ns.Note
@@ -22,45 +20,10 @@ local function loadSkip()
     local bucket = SuperSocialDB.ignoredAccount or {}
     SuperSocialDB.ignoredAccount = bucket
 
-    -- Migrate per-character buckets into the shared list.
-    if SuperSocialDB.ignoredByChar then
-        for _, charBucket in pairs(SuperSocialDB.ignoredByChar) do
-            for name in pairs(charBucket) do
-                bucket[name] = true
-            end
-        end
-        SuperSocialDB.ignoredByChar = nil
-    end
-
-    -- Migrate the pre-per-char flat list as well.
-    if SuperSocialDB.ignored then
-        for name in pairs(SuperSocialDB.ignored) do
-            bucket[name] = true
-        end
-        SuperSocialDB.ignored = nil
-    end
-
-    -- Migrate display-cased keys and bare `true` flags to lowercased keys with timestamps, collected first because pairs forbids adding keys mid-scan.
-    local now = time()
-    local fixes
+    -- Age out stale entries so the list can't grow without bound; a non-number stamp is pre-migration debris and goes too.
+    local cutoff = time() - IGNORE_DAYS * 86400
     for name, stamp in pairs(bucket) do
-        if stamp == true or name:lower() ~= name then
-            fixes = fixes or {}
-            fixes[name] = (stamp == true) and now or stamp
-        end
-    end
-    if fixes then
-        for name, stamp in pairs(fixes) do
-            local key = name:lower()
-            bucket[name] = nil
-            if not bucket[key] or stamp > bucket[key] then bucket[key] = stamp end
-        end
-    end
-
-    -- Age out stale entries.
-    local cutoff = now - IGNORE_DAYS * 86400
-    for name, stamp in pairs(bucket) do
-        if stamp < cutoff then bucket[name] = nil end
+        if type(stamp) ~= "number" or stamp < cutoff then bucket[name] = nil end
     end
 
     return bucket
@@ -82,22 +45,9 @@ end
 local function loadCooldowns()
     SuperSocialDB = SuperSocialDB or {}
 
-    -- One account-wide cooldown list shared by every character, like the ignore list — a relog onto an alt keeps everyone's cooldown running.
+    -- One account-wide cooldown list shared by every character, so a relog onto an alt keeps everyone's cooldown running.
     local bucket = SuperSocialDB.cooldownAccount or {}
     SuperSocialDB.cooldownAccount = bucket
-
-    -- Migrate per-character buckets, keeping the newest timestamp per name.
-    if SuperSocialDB.cooldownByChar then
-        for _, charBucket in pairs(SuperSocialDB.cooldownByChar) do
-            for name, ts in pairs(charBucket) do
-                if not bucket[name] or ts > bucket[name] then
-                    bucket[name] = ts
-                end
-            end
-        end
-        SuperSocialDB.cooldownByChar = nil
-    end
-
     return bucket
 end
 
@@ -132,6 +82,13 @@ local function isBlocked(blocked, fullName)
     return short ~= fullName and blocked[short:lower()] or false
 end
 
+-- The ignore list needs the same two-form lookup, so a hand-added short name still catches the player's "Name-Realm" form in a /who.
+local function isIgnored(skip, fullName)
+    if skip[fullName:lower()] then return true end
+    local short = nameOnly(fullName)
+    return short ~= fullName and skip[short:lower()] ~= nil or false
+end
+
 local function buildGroupSet()
     local set = {}
     local me = UnitName("player")
@@ -153,7 +110,7 @@ end
 
 -- People who left the group (or the whole group on disband) still count as groupmates for the /ww and /rr skip checks for a while afterwards. The watcher diffs the roster on every change and stamps whoever vanished. Session-only, like the reply tracking.
 local RECENT_GROUP_SECONDS = 15 * 60
-local recentGroupLeftAt = {}  -- short name -> time they left the group
+local leftGroupAt = {}  -- short name -> time they left the group
 local lastRoster = {}
 
 local rosterWatcher = CreateFrame("Frame")
@@ -163,17 +120,22 @@ rosterWatcher:SetScript("OnEvent", function()
     local roster = buildGroupSet()
     for name in pairs(lastRoster) do
         if not roster[name] then
-            recentGroupLeftAt[name] = time()
+            leftGroupAt[name] = time()
         end
     end
     lastRoster = roster
+    -- Sweep expired leavers on the same event, so the table can't grow all session between checks.
+    local cutoff = time() - RECENT_GROUP_SECONDS
+    for name, at in pairs(leftGroupAt) do
+        if at < cutoff then leftGroupAt[name] = nil end
+    end
 end)
 
 local function wasRecentlyGrouped(short)
-    local leftAt = recentGroupLeftAt[short]
+    local leftAt = leftGroupAt[short]
     if not leftAt then return false end
     if (time() - leftAt) >= RECENT_GROUP_SECONDS then
-        recentGroupLeftAt[short] = nil
+        leftGroupAt[short] = nil
         return false
     end
     return true
@@ -216,7 +178,16 @@ local function whisperTarget(input)
 end
 
 -- Every flag parseFlags understands, used to catch one misplaced after the message.
-local FLAG_WORDS = { ["-limit"] = true, ["-skip"] = true, ["-only"] = true, ["-ignore"] = true, ["-cd"] = true, ["-wait"] = true }
+local FLAG_WORDS = { ["-limit"] = true, ["-skip"] = true, ["-only"] = true, ["-ignore"] = true, ["-cd"] = true, ["-wait"] = true, ["-who"] = true }
+
+-- A token is part of a /who filter when it looks like one: a level, a range, a keyed term (c- z- r- n- g-), or a quoted continuation. The first token shaped like neither starts the message, so -who needs no closing delimiter.
+local function isWhoTerm(token, openQuote)
+    if openQuote then return true end
+    return token:match("^%d+$") ~= nil
+        or token:match("^%d+%-%d+$") ~= nil
+        or token:match("^[cnzrgCNZRG]%-") ~= nil
+        or token:match('^"') ~= nil
+end
 
 local function parseFlags(input)
     local tokens = {}
@@ -255,6 +226,22 @@ local function parseFlags(input)
         elseif flag == "-wait" then
             opts.wait = true
             cursor = cursor + 1
+        elseif flag == "-who" then
+            local terms = {}
+            local openQuote = false
+            cursor = cursor + 1
+            while cursor <= #tokens and isWhoTerm(tokens[cursor], openQuote) do
+                terms[#terms + 1] = tokens[cursor]
+                -- An odd number of quotes flips the state, so z-"Blackrock Depths" absorbs both tokens.
+                local _, quotes = tokens[cursor]:gsub('"', "")
+                if quotes % 2 == 1 then openQuote = not openQuote end
+                cursor = cursor + 1
+            end
+            if #terms == 0 then
+                opts.whoError = true
+            else
+                opts.who = table.concat(terms, " ")
+            end
         elseif (flag == "-skip" or flag == "-only") and value then
             local bucket = (flag == "-only") and opts.includeTerms or opts.terms
             local raw = value
@@ -293,17 +280,34 @@ local function parseFlags(input)
     return opts
 end
 
--- Shared with /rr so both commands parse flags the same way; /rr only acts on -limit and rejects -cd.
+-- Report the first flag mistake so the caller aborts instead of whispering a typo. Examples are per command; no cdEg means the caller rejects -cd itself.
+local function flagMistake(opts, limitEg, cdEg)
+    if opts.limitError then
+        fail("-limit needs a number.", "e.g. " .. limitEg .. ".")
+    elseif cdEg and opts.cdError then
+        fail("-cd needs minutes as a number.", "\"" .. opts.cdError .. "\" isn't one. e.g. " .. cdEg .. ".")
+    elseif opts.flagError then
+        fail("Flags go before the message.", opts.flagError .. " would have been whispered as text. e.g. " .. limitEg .. ".")
+    else
+        return false
+    end
+    return true
+end
+
+-- Shared with /rr so both commands parse flags and report mistakes the same way; /rr only acts on -limit and rejects -cd.
 ns.ParseFlags = parseFlags
+ns.FlagMistake = flagMistake
 ns.LoadBlocked = loadBlocked
 ns.IsBlocked = isBlocked
 
--- A term matches a player when it's a substring of their class or their zone, so "war" catches both Warriors and Warsong Gulch.
+-- A term matches a player when it's a substring of their class, their zone or their name, so "war" catches Warriors, Warsong Gulch and Warence alike.
 local function matchesTerm(whoInfo, term)
     local class = (whoInfo.classStr or ""):lower()
     local area = (whoInfo.area or ""):lower()
+    local name = (whoInfo.fullName or ""):lower()
     if class ~= "" and class:find(term, 1, true) then return true end
     if area ~= "" and area:find(term, 1, true) then return true end
+    if name ~= "" and name:find(term, 1, true) then return true end
     return false
 end
 
@@ -323,6 +327,55 @@ local function isIncluded(whoInfo, includeTerms)
     return false
 end
 
+-- Load the lists a blast reads and writes, once per command.
+local function loadLists(opts)
+    local lists = {
+        blocked = loadBlocked(),
+        skip = opts.useSkip and loadSkip() or nil,
+    }
+    if opts.useCooldown then
+        lists.cooldown = loadCooldowns()
+        if opts.cooldownSeconds then
+            pruneCooldowns(lists.cooldown, opts.cooldownSeconds)
+            lists.cooldownMinutes = math.floor(opts.cooldownSeconds / 60)
+        end
+    end
+    return lists
+end
+
+-- Cap to -limit, report one status line, queue the sends and stamp the persistent lists. Shared by /ww and /ws so the two can't drift apart; only /ww passes track, because sellers never enter the /rr exchange.
+local function sendBlast(opts, lists, eligible, counts, total, singular, multiple, track)
+    local sendCount = opts.limit and math.min(opts.limit, #eligible) or #eligible
+    counts.limit = #eligible - sendCount
+    local pool = total .. " " .. plural(total, singular, multiple)
+
+    if sendCount == 0 then
+        fail("Nobody to whisper.", "None of " .. pool .. " are eligible.")
+        ns.SkipLine(counts, total)
+        return
+    end
+
+    -- One fact per line, in the order they matter: who hears it, who doesn't and why, what the lists recorded, then the message itself. The queue's counter picks up from there.
+    local eta = ns.SendEta(sendCount * #ns.SplitWhisper(opts.text))
+    ok("Whispering", (sendCount == total and "all " or sendCount .. " of ") .. pool .. (eta and (", " .. eta) or "") .. ".")
+    ns.SkipLine(counts, total - sendCount)
+    ns.AppliedLine(sendCount, lists.skip ~= nil, lists.cooldownMinutes)
+    ns.QuoteMessage(opts.text)
+
+    local sentNames = track and {}
+    for i = 1, sendCount do
+        local name = eligible[i]
+        ns.QueueWhisper(opts.text, name)
+        if sentNames then sentNames[#sentNames + 1] = name end
+        if lists.skip then lists.skip[name:lower()] = time() end
+        -- Only a timed -cd records new recipients; bare -cd just reads the list.
+        if lists.cooldown and lists.cooldownMinutes then lists.cooldown[name] = time() end
+    end
+
+    -- /rr replies to these names once they whisper back.
+    if sentNames then ns.TrackWhispered(sentNames) end
+end
+
 local function dispatchWho(opts)
     local count = C_FriendList.GetNumWhoResults()
     if count == 0 then
@@ -331,96 +384,81 @@ local function dispatchWho(opts)
     end
 
     local groupSet = buildGroupSet()
-    local blocked = loadBlocked()
-    local skip = opts.useSkip and loadSkip() or nil
-    local cooldownBucket
-    local cooldownMinutes
-    if opts.useCooldown then
-        cooldownBucket = loadCooldowns()
-        if opts.cooldownSeconds then
-            pruneCooldowns(cooldownBucket, opts.cooldownSeconds)
-            cooldownMinutes = math.floor(opts.cooldownSeconds / 60)
-        end
-    end
+    local lists = loadLists(opts)
 
-    local skippedGroup, skippedRecentGroup, skippedBlocked, skippedFilter, skippedSkip, skippedCool = 0, 0, 0, 0, 0, 0
+    -- Keys are the ones ns.SkipReasons reads, counted in the order the checks run.
+    local counts = { blocked = 0, skiplist = 0, cooldown = 0, filter = 0, group = 0, recentGroup = 0 }
     local eligible = {}
     for i = 1, count do
         local whoInfo = C_FriendList.GetWhoInfo(i)
         local fullName = whoInfo and whoInfo.fullName
         if fullName then
             local short = nameOnly(fullName)
-            if groupSet[short or fullName] then
-                skippedGroup = skippedGroup + 1
-            elseif wasRecentlyGrouped(short or fullName) then
-                skippedRecentGroup = skippedRecentGroup + 1
-            elseif isBlocked(blocked, fullName) then
-                skippedBlocked = skippedBlocked + 1
-            elseif isFiltered(whoInfo, opts.terms) then
-                skippedFilter = skippedFilter + 1
-            elseif not isIncluded(whoInfo, opts.includeTerms) then
-                skippedFilter = skippedFilter + 1
-            elseif skip and skip[fullName:lower()] then
-                skippedSkip = skippedSkip + 1
-            elseif cooldownBucket and not isCool(cooldownBucket, fullName, opts.cooldownSeconds) then
-                skippedCool = skippedCool + 1
+            if groupSet[short] then
+                counts.group = counts.group + 1
+            elseif wasRecentlyGrouped(short) then
+                counts.recentGroup = counts.recentGroup + 1
+            elseif isBlocked(lists.blocked, fullName) then
+                counts.blocked = counts.blocked + 1
+            elseif isFiltered(whoInfo, opts.terms) or not isIncluded(whoInfo, opts.includeTerms) then
+                counts.filter = counts.filter + 1
+            elseif lists.skip and isIgnored(lists.skip, fullName) then
+                counts.skiplist = counts.skiplist + 1
+            elseif lists.cooldown and not isCool(lists.cooldown, fullName, opts.cooldownSeconds) then
+                counts.cooldown = counts.cooldown + 1
             else
                 eligible[#eligible + 1] = fullName
             end
         end
     end
 
-    local eligibleCount = #eligible
-    local sendCount = opts.limit and math.min(opts.limit, eligibleCount) or eligibleCount
+    sendBlast(opts, lists, eligible, counts, count, "/who result", "/who results", true)
+end
 
-    -- Counts behind the "N skipped" total, in the order the breakdown reads.
-    local skipCounts = {
-        blocked = skippedBlocked,
-        skiplist = skippedSkip,
-        cooldown = skippedCool,
-        filter = skippedFilter,
-        group = skippedGroup,
-        recentGroup = skippedRecentGroup,
-        limit = eligibleCount - sendCount,
-    }
+local WHO_TIMEOUT = 6      -- Seconds to wait for the server's answer before aborting, since the who list still holds the previous search.
+local PANEL_RESTORE = 8    -- The server answers some queries seconds late; re-arming the panel too early lets a straggler pop it open.
 
-    if sendCount == 0 then
-        local detail = "None of " .. count .. " /who " .. plural(count, "result", "results") .. " are eligible"
-        local why = ns.SkipBreakdown(skipCounts)
-        if why then detail = detail .. " (" .. why .. ")" end
-        fail("Nobody to whisper.", detail .. ".")
-        return
+-- Put the who plumbing back where the panel expects it: results to chat unless the panel is open, and the panel listening again.
+local function restoreWhoUi()
+    C_FriendList.SetWhoToUi(WhoFrame ~= nil and WhoFrame:IsShown() or false)
+    if FriendsFrame then FriendsFrame:RegisterEvent("WHO_LIST_UPDATE") end
+end
+
+-- -who runs the search itself: results go to the API list instead of chat, the Friends panel is deafened so it can't pop open, and the blast waits for this query's own results. A timeout aborts rather than dispatching, because the who list still holds the previous search and whispering those people would be the wrong run.
+local function runWho(opts)
+    if FriendsFrame then FriendsFrame:UnregisterEvent("WHO_LIST_UPDATE") end
+    C_FriendList.SetWhoToUi(true)
+
+    local waiter = CreateFrame("Frame")
+    local settled = false
+    local function stop()
+        settled = true
+        waiter:UnregisterEvent("WHO_LIST_UPDATE")
+        waiter:SetScript("OnEvent", nil)
     end
 
-    local skipped = count - sendCount
-
-    -- Fold the count, skip breakdown, and list changes into one status line.
-    local function summarize(lead)
-        local line = lead .. " of " .. count .. " /who " .. plural(count, "result", "results")
-        if skipped > 0 then
-            line = line .. ", " .. tint("skip", skipped .. " skipped")
-            local why = ns.SkipBreakdown(skipCounts)
-            if why then line = line .. " (" .. why .. ")" end
+    waiter:RegisterEvent("WHO_LIST_UPDATE")
+    -- A /who fires WHO_LIST_UPDATE twice: once to clear the old rows, then again when the server's answer lands. Only the second one carries results.
+    waiter:SetScript("OnEvent", function()
+        if settled then return end
+        local count, total = C_FriendList.GetNumWhoResults()
+        if count == 0 then return end
+        stop()
+        if total and total > count then
+            note(count .. " of " .. total .. " online match. Narrow the filter to reach the rest.")
         end
-        local applied = ns.AppliedSummary(sendCount, skip ~= nil, cooldownMinutes)
-        if applied then line = line .. ", " .. applied end
-        return line
-    end
+        dispatchWho(opts)
+    end)
 
-    -- Summary first, so it leads the outgoing whisper lines; the queue confirms delivery by the server's echoes.
-    status(summarize(tint("sent", "Whispering " .. sendCount)) .. ".")
-    local sentNames = {}
-    for i = 1, sendCount do
-        local fullName = eligible[i]
-        ns.QueueWhisper(opts.text, fullName)
-        sentNames[#sentNames + 1] = fullName
-        if skip then skip[fullName:lower()] = time() end
-        -- Only a timed -cd records new recipients; bare -cd just reads the list.
-        if cooldownBucket and cooldownMinutes then cooldownBucket[fullName] = time() end
-    end
+    C_Timer.After(WHO_TIMEOUT, function()
+        if settled then return end
+        stop()
+        fail("Nobody found.", "\"" .. opts.who .. "\" came back empty, or /who was throttled. Try again in a few seconds.")
+    end)
+    -- Restore on a fixed clock rather than on completion, because a straggling answer after the timeout would otherwise pop the panel.
+    C_Timer.After(PANEL_RESTORE, restoreWhoUi)
 
-    -- /rr replies to these names once they whisper back.
-    ns.TrackWhispered(sentNames)
+    C_FriendList.SendWho(opts.who)
 end
 
 -- -wait lets a one-click macro send /who then /ww: we hold the whisper until the next WHO_LIST_UPDATE brings the fresh results, with a timeout so a dropped update never leaves the command hanging.
@@ -445,23 +483,23 @@ end
 
 local function whisperWho(input)
     local opts = parseFlags(trim(input))
-    if opts.limitError then
-        fail("-limit needs a number.", "e.g. /ww -limit 10 LFM SM live.")
+    -- The -who diagnosis first: a filter that fell through leaves flags stranded in the message, and blaming those would hide the real mistake.
+    if opts.whoError then
+        fail("-who needs a filter.", "Terms are level ranges and keyed words (c- z- r- n- g-), e.g. /ww -who z-felwood c-warlock 50-60 LFM.")
         return
     end
-    if opts.cdError then
-        fail("-cd needs minutes as a number.", "\"" .. opts.cdError .. "\" isn't one. e.g. /ww -cd 30 WTB Black Lotus.")
-        return
-    end
-    if opts.flagError then
-        fail("Flags go before the message.", opts.flagError .. " would have been whispered as text. e.g. /ww -limit 10 LFM SM live.")
+    if flagMistake(opts, "/ww -limit 10 LFM SM live", "/ww -cd 30 WTB Black Lotus") then return end
+    if opts.who and opts.wait then
+        fail("-wait doesn't combine with -who.", "-who runs its own /who and waits for the answer already.")
         return
     end
     if not opts.text or opts.text == "" then
         note("Usage: /ww MESSAGE — whisper everyone in your current /who results. e.g. /ww LFM SM live. Type /ss for all options.")
         return
     end
-    if opts.wait then
+    if opts.who then
+        runWho(opts)
+    elseif opts.wait then
         waitForWho(opts)
     else
         dispatchWho(opts)
@@ -487,16 +525,9 @@ end
 
 local function whisperSellers(input)
     local opts = parseFlags(trim(input))
-    if opts.limitError then
-        fail("-limit needs a number.", "e.g. /ws -limit 10 still selling?")
-        return
-    end
-    if opts.cdError then
-        fail("-cd needs minutes as a number.", "\"" .. opts.cdError .. "\" isn't one. e.g. /ws -cd 30 still selling?")
-        return
-    end
-    if opts.flagError then
-        fail("Flags go before the message.", opts.flagError .. " would have been whispered as text. e.g. /ws -limit 10 still selling?")
+    if flagMistake(opts, "/ws -limit 10 still selling?", "/ws -cd 30 still selling?") then return end
+    if opts.who or opts.whoError then
+        fail("-who doesn't apply to /ws.", "It whispers the sellers in the Browse tab, no /who involved.")
         return
     end
     -- Sellers carry no class or zone, so the term filters can't apply here.
@@ -518,73 +549,22 @@ local function whisperSellers(input)
         return
     end
 
-    local blocked = loadBlocked()
-    local skip = opts.useSkip and loadSkip() or nil
-    local cooldownBucket, cooldownMinutes
-    if opts.useCooldown then
-        cooldownBucket = loadCooldowns()
-        if opts.cooldownSeconds then
-            pruneCooldowns(cooldownBucket, opts.cooldownSeconds)
-            cooldownMinutes = math.floor(opts.cooldownSeconds / 60)
-        end
-    end
-
-    local total = #names
-    local skippedBlocked, skippedSkip, skippedCool = 0, 0, 0
+    local lists = loadLists(opts)
+    local counts = { blocked = 0, skiplist = 0, cooldown = 0 }
     local eligible = {}
     for _, sellerName in ipairs(names) do
-        if isBlocked(blocked, sellerName) then
-            skippedBlocked = skippedBlocked + 1
-        elseif skip and skip[sellerName:lower()] then
-            skippedSkip = skippedSkip + 1
-        elseif cooldownBucket and not isCool(cooldownBucket, sellerName, opts.cooldownSeconds) then
-            skippedCool = skippedCool + 1
+        if isBlocked(lists.blocked, sellerName) then
+            counts.blocked = counts.blocked + 1
+        elseif lists.skip and isIgnored(lists.skip, sellerName) then
+            counts.skiplist = counts.skiplist + 1
+        elseif lists.cooldown and not isCool(lists.cooldown, sellerName, opts.cooldownSeconds) then
+            counts.cooldown = counts.cooldown + 1
         else
             eligible[#eligible + 1] = sellerName
         end
     end
 
-    local eligibleCount = #eligible
-    local sendCount = opts.limit and math.min(opts.limit, eligibleCount) or eligibleCount
-
-    local skipCounts = {
-        blocked = skippedBlocked,
-        skiplist = skippedSkip,
-        cooldown = skippedCool,
-        limit = eligibleCount - sendCount,
-    }
-
-    if sendCount == 0 then
-        local detail = "None of " .. total .. " " .. plural(total, "seller", "sellers") .. " are eligible"
-        local why = ns.SkipBreakdown(skipCounts)
-        if why then detail = detail .. " (" .. why .. ")" end
-        fail("Nobody to whisper.", detail .. ".")
-        return
-    end
-
-    local skipped = total - sendCount
-
-    -- Fold the count, skip breakdown, and list changes into one status line.
-    local function summarize(lead)
-        local line = lead .. " of " .. total .. " " .. plural(total, "seller", "sellers")
-        if skipped > 0 then
-            line = line .. ", " .. tint("skip", skipped .. " skipped")
-            local why = ns.SkipBreakdown(skipCounts)
-            if why then line = line .. " (" .. why .. ")" end
-        end
-        local applied = ns.AppliedSummary(sendCount, skip ~= nil, cooldownMinutes)
-        if applied then line = line .. ", " .. applied end
-        return line
-    end
-
-    status(summarize(tint("sent", "Whispering " .. sendCount)) .. ".")
-    for i = 1, sendCount do
-        local sellerName = eligible[i]
-        ns.QueueWhisper(opts.text, sellerName)
-        if skip then skip[sellerName:lower()] = time() end
-        -- Only a timed -cd records new recipients; bare -cd just reads the list.
-        if cooldownBucket and cooldownMinutes then cooldownBucket[sellerName] = time() end
-    end
+    sendBlast(opts, lists, eligible, counts, #names, "seller", "sellers")
 end
 
 -- Display form with a leading capital, matching how names render in game.
@@ -648,6 +628,44 @@ local function ignoreName(name)
     ok("Ignoring", shown .. ". Sends with -ignore skip them. /ss -ignore clear empties the list.")
 end
 
+-- The ignore list runs into the thousands, so its size and age are the two facts worth knowing before deciding whether to clear it.
+local function ignoreStatus()
+    local skip = loadSkip()
+    local count, oldest = 0, nil
+    for _, stamp in pairs(skip) do
+        count = count + 1
+        if not oldest or stamp < oldest then oldest = stamp end
+    end
+    if count == 0 then
+        note("Ignore list is empty. /ss -ignore NAME adds someone, and -ignore on a send fills it as it goes.")
+        return
+    end
+    local days = math.floor((time() - oldest) / 86400)
+    local age = (days == 0) and "today" or (days .. " " .. plural(days, "day", "days") .. " ago")
+    note(count .. " on the ignore list, oldest added " .. age .. ". Entries age out after " .. IGNORE_DAYS
+        .. " days. /ss -ignore NAME adds one, /ss -ignore clear empties the list.")
+end
+
+local function quietCommand(arg)
+    local target
+    if arg == "" then
+        target = not ns.QuietBlasts()
+    elseif arg == "on" then
+        target = true
+    elseif arg == "off" then
+        target = false
+    else
+        note("Usage: /ss quiet — hide your own outgoing lines during a /ww or /ws run. /ss quiet on and /ss quiet off set it outright.")
+        return
+    end
+    ns.SetQuietBlasts(target)
+    if target then
+        ok("Quiet mode on.", "A /ww or /ws run closes with its verdict instead of printing every whisper. /wt and /rr still show.")
+    else
+        ok("Quiet mode off.", "Every outgoing whisper prints to chat again.")
+    end
+end
+
 local function adminCommand(input)
     -- Keep the raw form so block/unblock names keep their capitalization.
     local raw = trim(input)
@@ -663,7 +681,7 @@ local function adminCommand(input)
     elseif input:match("^%-unblock%s") then
         unblockName(trim(raw:match("^%S+%s+(.*)$")))
     elseif input == "-ignore" then
-        note("Usage: /ss -ignore NAME — add a player to the ignore list, or /ss -ignore clear to empty it.")
+        ignoreStatus()
     elseif input == "-ignore clear" then
         clearSkip()
         ok("Ignore list cleared.")
@@ -674,6 +692,10 @@ local function adminCommand(input)
         ok("Cooldown history cleared.")
     elseif input:match("^%-cd") then
         note("Usage: /ss -cd clear — empty the cooldown history.")
+    elseif input == "quiet" then
+        quietCommand("")
+    elseif input:match("^quiet%s") then
+        quietCommand(trim(input:match("^%S+%s+(.*)$")))
     elseif input == "rate" then
         note("Sending at " .. string.format("%.2f", ns.PacingRate()) .. " whispers per second, learned from the server. /ss rate reset restores the default.")
     elseif input == "rate reset" then
@@ -709,6 +731,18 @@ local colorWatch = CreateFrame("Frame")
 colorWatch:RegisterEvent("PLAYER_ENTERING_WORLD")
 colorWatch:RegisterEvent("UPDATE_CHAT_COLOR")
 colorWatch:SetScript("OnEvent", blendWhisperColors)
+
+-- Saved variables are never rewritten wholesale, so a removed feature's data sits in the file forever unless it is dropped by name. These two are all that is left of a chat scanner and a login banner.
+local DEAD_KEYS = { "chatScan", "showLoginBanner", "ignoredByChar", "ignored", "cooldownByChar" }
+
+local dbCleanup = CreateFrame("Frame")
+dbCleanup:RegisterEvent("ADDON_LOADED")
+dbCleanup:SetScript("OnEvent", function(self, _, addon)
+    if addon ~= ADDON then return end
+    self:UnregisterAllEvents()
+    SuperSocialDB = SuperSocialDB or {}
+    for _, key in ipairs(DEAD_KEYS) do SuperSocialDB[key] = nil end
+end)
 
 SLASH_WHISPERTARGET1 = "/wt"
 SlashCmdList["WHISPERTARGET"] = whisperTarget

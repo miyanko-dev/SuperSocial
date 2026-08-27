@@ -17,11 +17,10 @@ local ROW_GAP = 10
 
 local YELLOW = "|cffffd200"
 
--- The panel is four sections: the slash commands, the modifier-click shortcuts, the /ss management subcommands, then the flags that refine /ww. "cmd" is the yellow left-column label; "eg" carries the full worked example so the column stays scannable.
+-- The panel is four sections: the slash commands, the click shortcuts, the /ss management subcommands, then the flags that refine /ww. "cmd" is the yellow left-column label; "eg" carries the full worked example so the column stays scannable.
 local INTRO =
     "Run /who, then /ww whispers everyone in the results — that's the core idea. "
     .. "The flags below refine who hears it, and they stack in any order before the message. "
-    .. "Modifier-clicking a player name anywhere in the UI whispers, invites, or friends them."
 
 local COMMANDS = {
     {
@@ -41,7 +40,7 @@ local COMMANDS = {
     },
     {
         cmd = "/rr",
-        desc = "Reply to everyone whispered via /ww who whispered back and hasn't been answered yet.",
+        desc = "Reply to everyone whispered via /ww who whispered back and hasn't been answered yet. On its own it reports how many are waiting.",
         eg = "/rr invite incoming, whisper me",
     },
     {
@@ -58,6 +57,11 @@ local MANAGE = {
         eg = "/ss stop",
     },
     {
+        cmd = "/ss quiet",
+        desc = "Replace your own outgoing lines during a run with one Y/Z counter that ticks in place, so the replies they draw aren't buried. The run still names the message it sends, and closes with its verdict on a fresh line at the bottom. Covers /ww, /ws and /rr; /wt always prints. On by default. /ss quiet on and /ss quiet off set it outright.",
+        eg = "/ss quiet",
+    },
+    {
         cmd = "/ss rate",
         desc = "Show the learned send rate in whispers per second.",
         eg = "/ss rate",
@@ -66,6 +70,11 @@ local MANAGE = {
         cmd = "/ss rate reset",
         desc = "Restore the default send rate; the server re-teaches it from there.",
         eg = "/ss rate reset",
+    },
+    {
+        cmd = "/ss -ignore",
+        desc = "Show how many names are on the ignore list and how old the oldest one is.",
+        eg = "/ss -ignore",
     },
     {
         cmd = "/ss -ignore NAME",
@@ -99,23 +108,7 @@ local MANAGE = {
     },
 }
 
--- Left column names the keys of the client this runs on, so a Mac never reads Windows modifiers.
 local SHORTCUTS = {
-    {
-        cmd = ns.ModifierLabels.whisper,
-        desc = "Whisper the player: chat names and list entries open a whisper tab, a unit frame presets the chat box.",
-        eg = ns.ModifierLabels.whisper .. " a name in chat",
-    },
-    {
-        cmd = ns.ModifierLabels.invite,
-        desc = "Invite the player to your group.",
-        eg = ns.ModifierLabels.invite .. " a raid frame",
-    },
-    {
-        cmd = ns.ModifierLabels.friend,
-        desc = "Add the player to your friends list.",
-        eg = ns.ModifierLabels.friend .. " a /who result",
-    },
     {
         cmd = "Shift-click",
         desc = "With the macro window open and no chat box waiting, paste a Questie tracker quest into the macro body instead of untracking it.",
@@ -124,10 +117,7 @@ local SHORTCUTS = {
 }
 
 local SHORTCUT_TARGETS =
-    "Shortcuts work on chat names, the target, focus and target-of-target frames, party and raid frames, "
-    .. "the friends, who and guild lists, and LFG browse entries (acting on the group leader). "
-    .. "Plain clicks keep their default behavior, and no shortcut ever fires on yourself or an NPC. "
-    .. "The Questie paste needs the macro window open with a macro selected; an open chat box always gets the link first."
+    "The Questie paste needs the macro window open with a macro selected; an open chat box always gets the link first."
 
 local FLAGS = {
     {
@@ -139,13 +129,13 @@ local FLAGS = {
     {
         cmd = "-skip",
         on = "/ww",
-        desc = "Skip anyone whose class or zone contains the word (Warrior, Maraudon, …). Separate several with commas.",
+        desc = "Skip anyone whose class, zone or name contains the word (Warrior, Maraudon, Xander, …). Separate several with commas.",
         eg = "/ww -skip Warlock, Maraudon LFM healer",
     },
     {
         cmd = "-only",
         on = "/ww",
-        desc = "The inverse of -skip: whisper only players matching a class or zone. Separate several with commas.",
+        desc = "The inverse of -skip: whisper only players matching a class, zone or name. Separate several with commas.",
         eg = "/ww -only Priest, Paladin LFM healer",
     },
     {
@@ -167,9 +157,15 @@ local FLAGS = {
         eg = "/ww -cd LFM SM live, need 1 tank",
     },
     {
+        cmd = "-who",
+        on = "/ww",
+        desc = "Run the /who search yourself: results skip chat and the panel stays closed. The filter is level ranges and keyed terms (c- z- r- n- g-); the first word shaped like neither starts the message.",
+        eg = "/ww -who 57-59 c-warrior -cd 60 LFM tank for BRD",
+    },
+    {
         cmd = "-wait",
         on = "/ww",
-        desc = "Hold the whisper until fresh /who results arrive. Lets one macro run /who then /ww in a single click.",
+        desc = "Hold the whisper until fresh /who results arrive, for a two-line macro with its own /who. -who replaces this in one line.",
         eg = "/ww -wait -limit 20 WTB Black Lotus",
     },
     {

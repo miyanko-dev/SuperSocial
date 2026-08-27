@@ -26,10 +26,13 @@ local capCycles = 0     -- Probe cycles of the current cap episode, reset the mo
 local tokens = BUCKET   -- Client-side mirror of the server's bucket, full after login idle.
 local lastRefill        -- GetTime of the last token refill.
 local pacedNoticed = false  -- The current run has announced that it switched from burst to paced sending.
+local queued = 0            -- Whispers accepted for this run, the Z of the Y/Z counter.
+local bulkThisRun = false   -- This run carried at least one bulk whisper, so it earns a counter. A lone /wt is its own confirmation and gets none.
+local progressText          -- Payload of the live counter line, so it can be found in chat and rewritten in place.
 local cappedThisRun = false -- A cap verdict happened this run, so the rate must not grow from it.
 local warnedText        -- Last over-long text warned about, so one bad blast warns once.
 local sent = 0
-local delivered = 0     -- Echo-confirmed whispers of the current run.
+local delivered = 0     -- Echo-confirmed whispers of the current run. Chat calls this "sent", because a server echo is what "sent" means from the player's side; the local keeps its name because `sent` above already counts attempts.
 local purged = 0        -- Whispers dropped as unreachable this run, so they never read as failures.
 local echoWatch         -- Timer sweeping unconfirmed for sends the server swallowed without any verdict.
 local scheduleEchoSweep -- Forward declared: every send arms the sweep, which needs the run bookkeeping below.
@@ -76,6 +79,61 @@ function ns.ResetPacingRate()
     return RATE_DEFAULT
 end
 
+-- Rough send time for a run of `count` whispers: the burst goes instantly, the rest pace at the learned rate. Nil inside the burst or under 5s, because "~2s" is noise.
+function ns.SendEta(count)
+    local paced = count - BUCKET
+    if paced <= 0 then return end
+    local secs = paced / pacingRate()
+    if secs < 5 then return end
+    if secs >= 120 then return "~" .. math.ceil(secs / 60) .. " min" end
+    return "~" .. math.ceil(secs) .. "s"
+end
+
+-- Quiet mode is on by default: a blast's own echo lines are noise, and the closing verdict is the honest record.
+function ns.QuietBlasts()
+    SuperSocialDB = SuperSocialDB or {}
+    if SuperSocialDB.quietBlasts == nil then return true end
+    return SuperSocialDB.quietBlasts
+end
+
+function ns.SetQuietBlasts(on)
+    SuperSocialDB = SuperSocialDB or {}
+    SuperSocialDB.quietBlasts = on and true or false
+    return SuperSocialDB.quietBlasts
+end
+
+-- One chat line per run, rewritten where it stands as the count moves, so a quiet run still shows what it is doing. It stays a counter to the end: the closing verdict is appended as its own message instead, so the outcome is always the bottom line no matter what else printed during the run. The addon's own prefix and any chat timestamp sit ahead of the payload, so the payload is always the line's suffix. Rewriting is the only option here, because RemoveMessagesByPredicate strips a chat frame's hyperlinks along with the line.
+local function writeProgress(text)
+    local frame = DEFAULT_CHAT_FRAME
+    local previous = progressText
+    if previous and frame and frame.TransformMessages then
+        local rewritten = false
+        frame:TransformMessages(
+            function(message) return message:sub(-#previous) == previous end,
+            function(message, r, g, b, ...)
+                rewritten = true
+                return message:sub(1, #message - #previous) .. text, r, g, b, ...
+            end)
+        if rewritten then
+            progressText = text
+            return
+        end
+    end
+    -- Nothing to rewrite: this is the run's first progress, or chat was cleared under it.
+    progressText = text
+    ns.Status(text)
+end
+
+-- Y/Z of whispers the server has confirmed. Unreachable targets ride along because they leave the run without ever reaching Y.
+local function showProgress()
+    if not bulkThisRun then return end
+    local line = ns.Tint("sent", delivered .. "/" .. queued) .. " sent"
+    if purged > 0 then
+        line = line .. ", " .. ns.Tint("skip", purged .. " unreachable")
+    end
+    writeProgress(line .. ".")
+end
+
 local function refillTokens()
     local now = GetTime()
     tokens = math.min(BUCKET, tokens + (now - (lastRefill or now)) * pacingRate())
@@ -86,6 +144,7 @@ local function sendOne(whisper, probeSend)
     if not probeSend then
         whisper.tries = whisper.tries + 1
     end
+    if whisper.kind ~= "personal" then bulkThisRun = true end
     if not whisper.counted then
         whisper.counted = true
         sent = sent + 1
@@ -98,7 +157,8 @@ local function sendOne(whisper, probeSend)
         ownedByShort[short] = owned
     end
     owned.at = time()
-    owned.texts[whisper.text] = true
+    -- The kind rides along with the text: the chat filter mutes bulk sends and leaves conversation visible, and onEcho only needs the entry to exist.
+    owned.texts[whisper.text] = whisper.kind or "blast"
     whisper.sentAt = GetTime()
     SendChatMessage(whisper.text, "WHISPER", nil, whisper.target)
     unconfirmed[#unconfirmed + 1] = whisper
@@ -127,36 +187,58 @@ local function drainPaced()
     end
 end
 
+-- Freeze the counter where the run stopped. Marking it also takes it out of matching range, so the next run's counter can't rewrite this one.
+local function freezeProgress()
+    if not progressText then return end
+    writeProgress(progressText:gsub("%.$", "") .. ", " .. ns.Tint("skip", "stopped") .. ".")
+    progressText = nil
+end
+
 local function cancelPause()
     if capTimer then capTimer:Cancel() end
     capTimer = nil
+end
+
+-- Zero the per-run bookkeeping, shared by the natural close and /ss stop.
+local function resetRun()
+    sent = 0
+    delivered = 0
+    purged = 0
+    queued = 0
+    bulkThisRun = false
+    pacedNoticed = false
+    cappedThisRun = false
 end
 
 -- Failed replies go back on the /rr list, so a swallowed reply is deferred, never lost.
 local function giveUp(whisper)
     if whisper.kind == "reply" then
         ns.ReopenReply(whisper.target)
-        ns.Fail("Couldn't deliver the reply to " .. whisper.target .. ".", "They're back on the /rr list.")
+        ns.Fail("Couldn't send the reply to " .. whisper.target .. ".", "They're back on the /rr list.")
     else
         ns.Fail("Gave up on whispering " .. whisper.target, "after " .. MAX_TRIES .. " tries.")
     end
 end
 
--- Close the run's books once nothing is queued or in flight. The all-clear line is echo-counted: it only prints when every whisper of the run was confirmed delivered by the server. A clean run that exercised the bucket without a single cap verdict earns a small rate increase, the probing half of the calibration. Unreachable targets sit outside the failure math, so one offline player can't block that increase.
-local function finishRunIfDrained()
+-- Close the run's books, a no-op while anything is still queued or in flight. The all-clear line is echo-counted: it only prints when every whisper of the run was confirmed delivered by the server. A clean run that exercised the bucket without a single cap verdict earns a small rate increase, the probing half of the calibration. Unreachable targets sit outside the failure math, so one offline player can't block that increase.
+local function closeRun()
     if #pending > 0 or #unconfirmed > 0 then return end
     if sent > 0 then
         local failed = sent - delivered - purged
         local verdict
         if failed > 0 or purged > 0 then
-            local bits = { ns.Tint("sent", delivered .. " delivered") }
+            local bits = { ns.Tint("sent", delivered .. " sent") }
             if purged > 0 then bits[#bits + 1] = ns.Tint("skip", purged .. " unreachable") end
             if failed > 0 then bits[#bits + 1] = ns.Tint("skip", failed .. " failed") end
             verdict = table.concat(bits, ", ") .. " of " .. sent .. " " .. ns.Plural(sent, "whisper", "whispers") .. "."
         elseif sent > 1 then
-            -- A single delivery already shows as the outgoing whisper line; only runs need a closing verdict.
-            verdict = ns.Tint("sent", "Delivered all " .. sent .. " whispers.")
+            verdict = ns.Tint("sent", "Sent") .. " all " .. sent .. " whispers."
+        elseif bulkThisRun then
+            -- Every run closes with a verdict, however small, so the bottom line always says where it ended.
+            verdict = ns.Tint("sent", "Sent") .. " 1 whisper."
         end
+        -- A finished counter reads Y of Y, which a running one only reaches at its own end, so leaving it behind can never mislead a later run's rewrite.
+        progressText = nil
         if verdict then
             -- The chat frame renders the final echo's own "To Name:" line after this handler returns; defer one frame so the verdict really is the last line in chat.
             C_Timer.After(0, function() ns.Note(verdict) end)
@@ -165,11 +247,7 @@ local function finishRunIfDrained()
             setPacingRate(pacingRate() + RATE_STEP)
         end
     end
-    sent = 0
-    delivered = 0
-    purged = 0
-    pacedNoticed = false
-    cappedThisRun = false
+    resetRun()
     -- Let go of long-idle recipients so a manual whisper much later reads as a personal answer again.
     local cutoff = time() - OWNED_GRACE
     for short, owned in pairs(ownedByShort) do
@@ -198,7 +276,7 @@ local function echoSweep()
     if #pending > 0 and not pacer and not collector then
         drainPaced()
     else
-        finishRunIfDrained()
+        closeRun()
     end
 end
 
@@ -217,7 +295,7 @@ local function sendProbe()
     local probe = table.remove(pending, 1)
     if not probe then
         probing = false
-        finishRunIfDrained()
+        closeRun()
         return
     end
     probe.probed = true
@@ -243,8 +321,8 @@ local function abortEpisode()
     probing = false
     cancelPause()
     capCycles = 0
-    ns.Fail("Whisper cap never lifted.", lost .. " undelivered after " .. math.floor(MAX_CAP_CYCLES * CAP_PAUSE / 60) .. " minutes. Replies went back to the /rr list.")
-    finishRunIfDrained()
+    ns.Fail("Whisper cap never lifted.", lost .. " unsent after " .. math.floor(MAX_CAP_CYCLES * CAP_PAUSE / 60) .. " minutes. Replies went back to the /rr list.")
+    closeRun()
 end
 
 -- Pause over: everything still unechoed was swallowed (it had CAP_PAUSE seconds to echo). Recycle it, rotating failed probes to the back, and probe again.
@@ -292,7 +370,7 @@ local function onThrottled()
     setPacingRate(pacingRate() * 0.5)
     if pacer then pacer:Cancel() end
     pacer = nil
-    ns.Note(ns.Tint("skip", "Whisper cap hit.") .. " " .. delivered .. " of " .. sent .. " delivered so far, slowing to " .. string.format("%.2f", pacingRate()) .. "/s and pausing " .. CAP_PAUSE .. "s.")
+    ns.Note(ns.Tint("skip", "Whisper cap hit.") .. " " .. delivered .. " of " .. queued .. " sent so far, slowing to " .. string.format("%.2f", pacingRate()) .. "/s and pausing " .. CAP_PAUSE .. "s.")
     capTimer = C_Timer.NewTimer(CAP_PAUSE, probeAfterPause)
 end
 
@@ -317,11 +395,12 @@ local function purgeTarget(name)
     end
     if removed > 0 then
         ns.Fail("Skipping " .. short .. ".", "Unreachable, removed from this run.")
+        showProgress()
     end
     if #unconfirmed == 0 and #pending == 0 then
         cancelPause()
         probing = false
-        finishRunIfDrained()
+        closeRun()
     elseif probing and #unconfirmed == 0 then
         -- The probe itself was the unreachable one; its verdict said nothing about the cap, so probe again.
         sendProbe()
@@ -350,6 +429,7 @@ local function onEcho(text, target)
     local whisper = table.remove(unconfirmed, hit)
     delivered = delivered + 1
     ns.OnWhisperDelivered(target, whisper.kind == "personal")
+    showProgress()
 
     if probing and #unconfirmed == 0 then
         probing = false
@@ -363,7 +443,7 @@ local function onEcho(text, target)
     if not capTimer and not probing and #pending > 0 and not pacer then
         drainPaced()
     else
-        finishRunIfDrained()
+        closeRun()
     end
 end
 
@@ -387,6 +467,7 @@ function ns.QueueWhisper(text, target, kind)
             end
         else
             pending[#pending + 1] = { text = part, target = target, kind = kind, tries = 0 }
+            queued = queued + 1
         end
     end
     if capTimer or probing then
@@ -419,11 +500,8 @@ function ns.CancelQueue()
     cancelPause()
     probing = false
     capCycles = 0
-    pacedNoticed = false
-    cappedThisRun = false
-    sent = 0
-    delivered = 0
-    purged = 0
+    resetRun()
+    freezeProgress()
     return doneSent, cancelled
 end
 
@@ -455,5 +533,13 @@ local addFilter = ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter or ChatF
 if addFilter then
     addFilter("CHAT_MSG_SYSTEM", function(_, _, msg)
         if isCapVerdict(msg) and (capTimer or probing or #unconfirmed > 0) then return true end
+    end)
+
+    -- Mute a run's own "To Name:" echoes, so the replies they draw aren't buried under fifty lines of your own outgoing text. The Y/Z counter stands in for them. Every bulk command is hidden the same way, /rr included; only /wt is left, because a single hand-aimed whisper is its own confirmation and starts no run to count. The queue's delivery ledger is unaffected, because it counts echoes on its own event frame and message filters never reach that.
+    addFilter("CHAT_MSG_WHISPER_INFORM", function(_, _, text, target)
+        if not ns.QuietBlasts() then return end
+        local owned = ownedByShort[ns.NameOnly(target)]
+        local kind = owned and owned.texts[text]
+        if kind == "blast" or kind == "reply" then return true end
     end)
 end
