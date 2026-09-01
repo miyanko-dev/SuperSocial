@@ -42,7 +42,7 @@ local function toPattern(fmt)
     return "^" .. fmt:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1"):gsub("%%%%s", "(.+)") .. "$"
 end
 
--- Server verdict wording. The client's own globals carry the exact (localized) text and are matched first; the literal enUS strings, verified against the 1.15.9 and 2.5.6 client data, back them up so a missing global can never blind the addon.
+-- Server verdict wording. The client's own globals carry the exact (localized) text and are matched first; the literal enUS strings, verified against the 1.15.9 client data, back them up so a missing global can never blind the addon.
 local THROTTLED_TEXT = ERR_CHAT_THROTTLED or "The number of messages that can be sent is limited, please wait to send another message."
 local WRONG_FACTION_TEXT = ERR_CHAT_WRONG_FACTION or "You can only whisper to members of your alliance."
 local NOT_FOUND_PATTERN = toPattern(ERR_CHAT_PLAYER_NOT_FOUND_S or "No player named '%s' is currently playing.")
@@ -528,7 +528,7 @@ confirmWatch:SetScript("OnEvent", function(_, _, text, target)
     onEcho(text, target)
 end)
 
--- Hide the repeating yellow cap error while a run is active; the addon's own status lines cover it. The filter API lives in ChatFrameUtil on 1.15.9 and 2.5.6, with the old global as fallback for older clients.
+-- Hide the repeating yellow cap error while a run is active; the addon's own status lines cover it. The filter API lives in ChatFrameUtil on 1.15.9, with the old global as fallback for older clients.
 local addFilter = ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter or ChatFrame_AddMessageEventFilter
 if addFilter then
     addFilter("CHAT_MSG_SYSTEM", function(_, _, msg)
