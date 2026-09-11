@@ -11,26 +11,16 @@ local function trim(s)
     return (s or ""):gsub("^%s+", ""):gsub("%s+$", "")
 end
 
-local IGNORE_DAYS = 30 -- Ignore entries older than this age out, so the list can't grow without bound.
+-- A cooldown duration is a number with an optional unit: bare numbers are minutes, s m h d spell the rest. Zero and malformed input return nil so the caller can name the slip.
+local DURATION_UNITS = { s = 1, m = 60, h = 3600, d = 86400 }
+local DURATION_HINT = "Use 30 (minutes), 30m, 2h or 30d."
 
-local function loadSkip()
-    SuperSocialDB = SuperSocialDB or {}
-
-    -- One account-wide ignore list shared by every character: lowercased name -> time added.
-    local bucket = SuperSocialDB.ignoredAccount or {}
-    SuperSocialDB.ignoredAccount = bucket
-
-    -- Age out stale entries so the list can't grow without bound; a non-number stamp is pre-migration debris and goes too.
-    local cutoff = time() - IGNORE_DAYS * 86400
-    for name, stamp in pairs(bucket) do
-        if type(stamp) ~= "number" or stamp < cutoff then bucket[name] = nil end
-    end
-
-    return bucket
-end
-
-local function clearSkip()
-    wipe(loadSkip())
+local function parseDuration(token)
+    local amount, unit = token:match("^(%d+%.?%d*)([smhdSMHD]?)$")
+    if not amount then return nil end
+    local seconds = tonumber(amount) * DURATION_UNITS[unit == "" and "m" or unit:lower()]
+    if not seconds or seconds <= 0 then return nil end
+    return math.floor(seconds)
 end
 
 local function loadBlocked()
@@ -45,25 +35,16 @@ end
 local function loadCooldowns()
     SuperSocialDB = SuperSocialDB or {}
 
-    -- One account-wide cooldown list shared by every character, so a relog onto an alt keeps everyone's cooldown running.
+    -- One account-wide cooldown list shared by every character, so a relog onto an alt keeps everyone's cooldown running. Keys are lowercased names, values the time the cooldown expires, so one list serves a 30-minute and a 30-day cooldown alike.
     local bucket = SuperSocialDB.cooldownAccount or {}
     SuperSocialDB.cooldownAccount = bucket
-    return bucket
-end
 
-local function pruneCooldowns(bucket, cooldownSeconds)
-    local cutoff = time() - cooldownSeconds
-    for n, ts in pairs(bucket) do
-        if ts < cutoff then bucket[n] = nil end
+    -- Expired entries go on every load so the list can't grow without bound; a non-number is pre-migration debris and goes too.
+    local now = time()
+    for name, expiry in pairs(bucket) do
+        if type(expiry) ~= "number" or expiry <= now then bucket[name] = nil end
     end
-end
-
-local function isCool(bucket, name, cooldownSeconds)
-    local ts = bucket[name]
-    if not ts then return true end
-    -- Bare -cd has no duration: any entry on the list counts as still cooling.
-    if not cooldownSeconds then return false end
-    return (time() - ts) >= cooldownSeconds
+    return bucket
 end
 
 local function clearCooldowns()
@@ -82,11 +63,15 @@ local function isBlocked(blocked, fullName)
     return short ~= fullName and blocked[short:lower()] or false
 end
 
--- The ignore list needs the same two-form lookup, so a hand-added short name still catches the player's "Name-Realm" form in a /who.
-local function isIgnored(skip, fullName)
-    if skip[fullName:lower()] then return true end
+-- The cooldown list needs the same two-form lookup, so a hand-added short name still catches the player's "Name-Realm" form in a /who.
+local function onCooldown(cooldowns, fullName)
+    local now = time()
+    local expiry = cooldowns[fullName:lower()]
+    if expiry and expiry > now then return true end
     local short = nameOnly(fullName)
-    return short ~= fullName and skip[short:lower()] ~= nil or false
+    if short == fullName then return false end
+    expiry = cooldowns[short:lower()]
+    return expiry ~= nil and expiry > now
 end
 
 local function buildGroupSet()
@@ -150,14 +135,18 @@ local function whisperTarget(input)
     local tokens = {}
     for t in input:gmatch("%S+") do tokens[#tokens + 1] = t end
     local cursor = 1
-    local useSkip = false
-    if tokens[cursor] == "-ignore" then
-        useSkip = true
-        cursor = cursor + 1
+    local cooldownSeconds
+    if tokens[cursor] == "-cd" then
+        cooldownSeconds = tokens[cursor + 1] and parseDuration(tokens[cursor + 1])
+        if not cooldownSeconds then
+            fail("-cd needs a duration.", DURATION_HINT)
+            return
+        end
+        cursor = cursor + 2
     end
     local parts = ns.SplitWhisper(table.concat(tokens, " ", cursor))
     if #parts == 0 then
-        note("Usage: /wt MESSAGE — whisper your current target (-ignore also adds them to the ignore list). e.g. /wt got room for one more?")
+        note("Usage: /wt MESSAGE whispers your target, e.g. /wt got room for one more? Add -cd 30d to put them on cooldown.")
         return
     end
     if not (UnitExists("target") and UnitIsPlayer("target")) then
@@ -166,36 +155,95 @@ local function whisperTarget(input)
     end
     local targetName = UnitName("target")
     if isBlocked(loadBlocked(), targetName) then
-        fail("Blocked.", targetName .. " is on the block list. /ss -unblock " .. targetName .. " removes them.")
+        fail("Blocked.", targetName .. " is on the block list (/ss -unblock " .. targetName .. ").")
         return
     end
     -- Through the queue for cap rescue, flagged personal so /rr treats it as an answer, not a blast.
     for _, part in ipairs(parts) do
         ns.QueueWhisper(part, targetName, "personal")
     end
-    ok("Whispered", targetName .. ".")
-    if useSkip then loadSkip()[targetName:lower()] = time() end
+    if cooldownSeconds then
+        loadCooldowns()[targetName:lower()] = time() + cooldownSeconds
+        ok("Whispered", targetName .. ", " .. ns.FormatDuration(cooldownSeconds) .. " cooldown.")
+    else
+        ok("Whispered", targetName .. ".")
+    end
 end
 
 -- Every flag parseFlags understands, used to catch one misplaced after the message.
-local FLAG_WORDS = { ["-limit"] = true, ["-skip"] = true, ["-only"] = true, ["-ignore"] = true, ["-cd"] = true, ["-wait"] = true, ["-who"] = true }
+local FLAG_WORDS = { ["-limit"] = true, ["-skip"] = true, ["-only"] = true, ["-cd"] = true, ["-who"] = true }
 
--- A token is part of a /who filter when it looks like one: a level, a range, a keyed term (c- z- r- n- g-), or a quoted continuation. The first token shaped like neither starts the message, so -who needs no closing delimiter.
-local function isWhoTerm(token, openQuote)
-    if openQuote then return true end
-    return token:match("^%d+$") ~= nil
-        or token:match("^%d+%-%d+$") ~= nil
-        or token:match("^[cnzrgCNZRG]%-") ~= nil
-        or token:match('^"') ~= nil
+-- Flags whose value is a bracket group, mapped to the opts field the group fills.
+local BRACKET_FLAGS = { ["-who"] = "who", ["-skip"] = "terms", ["-only"] = "includeTerms" }
+
+-- A bracket flag may arrive glued to its opening bracket, so "-skip(mage)" still names the flag.
+local function flagName(token)
+    return token:match("^(%-%a+)%(") or token
+end
+
+-- A bracket group starts right after its flag and runs to the first closing bracket, so the message may start with anything and the boundary is never guessed. Text glued behind the closing bracket becomes the next token. Returns the content and the cursor past it, or nil, the mistake and the cursor.
+local function readBracket(tokens, cursor, flag)
+    local head = tokens[cursor]:sub(#flag + 1)
+    if head == "" then
+        cursor = cursor + 1
+        head = tokens[cursor]
+    end
+    if not head or head:sub(1, 1) ~= "(" then return nil, "open", cursor end
+    local parts = {}
+    local piece = head:sub(2)
+    while true do
+        local body, rest = piece:match("^(.-)%)(.*)$")
+        if body then
+            parts[#parts + 1] = body
+            if rest ~= "" then tokens[cursor] = rest else cursor = cursor + 1 end
+            local content = trim(table.concat(parts, " "))
+            if content == "" then return nil, "empty", cursor end
+            return content, nil, cursor
+        end
+        parts[#parts + 1] = piece
+        cursor = cursor + 1
+        piece = tokens[cursor]
+        if not piece then return nil, "close", cursor end
+    end
+end
+
+-- Field keys inside -skip and -only brackets, the same letters /who uses so one vocabulary serves both.
+local TERM_FIELDS = { c = "class", z = "zone", n = "name" }
+
+-- Split a bracket group into terms: a word or a quoted phrase, optionally led by c- z- n- to pin it to one field. Without a key a term matches any field.
+local function splitTerms(content)
+    local terms = {}
+    local rest = content
+    while true do
+        rest = rest:match("^%s*(.*)$")
+        if rest == "" then break end
+        local key = rest:match("^([cznCZN])%-")
+        if key then rest = rest:sub(3) end
+        local text
+        if rest:sub(1, 1) == '"' then
+            local close = rest:find('"', 2, true)
+            text = rest:sub(2, (close or #rest + 1) - 1)
+            rest = close and rest:sub(close + 1) or ""
+        else
+            text = rest:match("^%S*")
+            rest = rest:sub(#text + 1)
+        end
+        text = trim(text):lower()
+        if text ~= "" then
+            terms[#terms + 1] = { field = key and TERM_FIELDS[key:lower()], text = text }
+        end
+    end
+    return terms
 end
 
 local function parseFlags(input)
     local tokens = {}
     for t in input:gmatch("%S+") do tokens[#tokens + 1] = t end
     local cursor = 1
-    local opts = { terms = {}, includeTerms = {}, useSkip = false }
+    local opts = { terms = {}, includeTerms = {} }
     while cursor <= #tokens do
         local flag = tokens[cursor]
+        local name = flagName(flag)
         local value = tokens[cursor + 1]
         if flag == "-limit" then
             local count = value and tonumber(value)
@@ -209,56 +257,29 @@ local function parseFlags(input)
             end
         elseif flag == "-cd" then
             opts.useCooldown = true
-            local minutes = value and tonumber(value)
-            if minutes and minutes > 0 then
-                opts.cooldownSeconds = math.floor(minutes * 60)
+            local seconds = value and parseDuration(value)
+            if seconds then
+                opts.cooldownSeconds = seconds
                 cursor = cursor + 2
             elseif value and value:match("^%d") then
-                -- A digit-led token that isn't a positive number is a typo ("3o", "0"), not message text.
+                -- A digit-led token that isn't a duration is a typo ("3o", "0", "30x"), not message text.
                 opts.cdError = value
                 cursor = cursor + 2
             else
                 cursor = cursor + 1
             end
-        elseif flag == "-ignore" then
-            opts.useSkip = true
-            cursor = cursor + 1
-        elseif flag == "-wait" then
-            opts.wait = true
-            cursor = cursor + 1
-        elseif flag == "-who" then
-            local terms = {}
-            local openQuote = false
-            cursor = cursor + 1
-            while cursor <= #tokens and isWhoTerm(tokens[cursor], openQuote) do
-                terms[#terms + 1] = tokens[cursor]
-                -- An odd number of quotes flips the state, so z-"Blackrock Depths" absorbs both tokens.
-                local _, quotes = tokens[cursor]:gsub('"', "")
-                if quotes % 2 == 1 then openQuote = not openQuote end
-                cursor = cursor + 1
-            end
-            if #terms == 0 then
-                opts.whoError = true
+        elseif BRACKET_FLAGS[name] then
+            local content, mistake, nextCursor = readBracket(tokens, cursor, name)
+            if not content then
+                if not opts.bracketError then opts.bracketError = { flag = name, mistake = mistake } end
+            elseif name == "-who" then
+                opts.who = content
             else
-                opts.who = table.concat(terms, " ")
+                -- -skip and -only may repeat; every group adds to the same bucket.
+                local bucket = opts[BRACKET_FLAGS[name]]
+                for _, term in ipairs(splitTerms(content)) do bucket[#bucket + 1] = term end
             end
-        elseif (flag == "-skip" or flag == "-only") and value then
-            local bucket = (flag == "-only") and opts.includeTerms or opts.terms
-            local raw = value
-            cursor = cursor + 2
-            -- Keep absorbing tokens while the comma list is still open, so "-skip Maraudon, Warlock" works with spaces around the commas.
-            while cursor <= #tokens do
-                local listContinues = raw:match(",%s*$") or tokens[cursor]:match("^,")
-                if not listContinues then break end
-                raw = raw .. " " .. tokens[cursor]
-                cursor = cursor + 1
-            end
-            for term in raw:gmatch("[^,]+") do
-                local cleaned = trim(term):lower()
-                if cleaned ~= "" then
-                    bucket[#bucket + 1] = cleaned
-                end
-            end
+            cursor = nextCursor
         else
             break
         end
@@ -269,7 +290,8 @@ local function parseFlags(input)
 
     -- A known flag inside the message is a misplaced flag, not text to whisper; flags only parse before the message.
     for _, word in ipairs(words) do
-        if FLAG_WORDS[word:lower()] then
+        local lowered = word:lower()
+        if FLAG_WORDS[lowered] or FLAG_WORDS[flagName(lowered)] then
             opts.flagError = word
             break
         end
@@ -280,34 +302,58 @@ local function parseFlags(input)
     return opts
 end
 
--- Report the first flag mistake so the caller aborts instead of whispering a typo. Examples are per command; no cdEg means the caller rejects -cd itself.
-local function flagMistake(opts, limitEg, cdEg)
-    if opts.limitError then
-        fail("-limit needs a number.", "e.g. " .. limitEg .. ".")
-    elseif cdEg and opts.cdError then
-        fail("-cd needs minutes as a number.", "\"" .. opts.cdError .. "\" isn't one. e.g. " .. cdEg .. ".")
+-- One worked example per bracket flag and one line per way a group can go wrong, so the nudge names the actual slip.
+local BRACKET_EXAMPLES = {
+    ["-who"] = "-who (mage 50-60 stormwind)",
+    ["-skip"] = "-skip (warlock z-maraudon)",
+    ["-only"] = "-only (priest c-paladin)",
+}
+local BRACKET_MISTAKES = {
+    open = "",
+    empty = "They're empty.",
+    close = "The closing one is missing.",
+}
+
+-- Report the first flag mistake so the caller aborts instead of whispering a typo. allowCooldown is false for commands that reject -cd outright, so they can say so instead of correcting its duration.
+local function flagMistake(opts, allowCooldown)
+    local bracket = opts.bracketError
+    if bracket then
+        -- Diagnosed first: a group that fell through leaves its words stranded in the message, and blaming those would hide the real mistake.
+        local why = BRACKET_MISTAKES[bracket.mistake]
+        fail(bracket.flag .. " needs brackets.", (why ~= "" and (why .. " ") or "") .. "e.g. " .. BRACKET_EXAMPLES[bracket.flag] .. ".")
+    elseif opts.limitError then
+        fail("-limit needs a number.", "e.g. -limit 10.")
+    elseif allowCooldown and opts.cdError then
+        fail("-cd needs a duration.", "\"" .. opts.cdError .. "\" isn't one. " .. DURATION_HINT)
     elseif opts.flagError then
-        fail("Flags go before the message.", opts.flagError .. " would have been whispered as text. e.g. " .. limitEg .. ".")
+        fail("Flags go before the message.", "\"" .. opts.flagError .. "\" landed inside it.")
     else
         return false
     end
     return true
 end
 
+-- A -who that failed to parse still counts as used, so commands without a /who can reject it by name.
+local function usedWho(opts)
+    return opts.who ~= nil or (opts.bracketError ~= nil and opts.bracketError.flag == "-who")
+end
+
 -- Shared with /rr so both commands parse flags and report mistakes the same way; /rr only acts on -limit and rejects -cd.
 ns.ParseFlags = parseFlags
 ns.FlagMistake = flagMistake
+ns.UsedWho = usedWho
 ns.LoadBlocked = loadBlocked
 ns.IsBlocked = isBlocked
 
--- A term matches a player when it's a substring of their class, their zone or their name, so "war" catches Warriors, Warsong Gulch and Warence alike.
+-- A keyed term matches one field; a bare term is a substring of the class, the zone or the name, so "war" catches Warriors, Warsong Gulch and Warence alike.
 local function matchesTerm(whoInfo, term)
-    local class = (whoInfo.classStr or ""):lower()
-    local area = (whoInfo.area or ""):lower()
-    local name = (whoInfo.fullName or ""):lower()
-    if class ~= "" and class:find(term, 1, true) then return true end
-    if area ~= "" and area:find(term, 1, true) then return true end
-    if name ~= "" and name:find(term, 1, true) then return true end
+    local fields = { class = whoInfo.classStr, zone = whoInfo.area, name = whoInfo.fullName }
+    if term.field then
+        return (fields[term.field] or ""):lower():find(term.text, 1, true) ~= nil
+    end
+    for _, value in pairs(fields) do
+        if value and value:lower():find(term.text, 1, true) then return true end
+    end
     return false
 end
 
@@ -329,16 +375,10 @@ end
 
 -- Load the lists a blast reads and writes, once per command.
 local function loadLists(opts)
-    local lists = {
-        blocked = loadBlocked(),
-        skip = opts.useSkip and loadSkip() or nil,
-    }
+    local lists = { blocked = loadBlocked() }
     if opts.useCooldown then
         lists.cooldown = loadCooldowns()
-        if opts.cooldownSeconds then
-            pruneCooldowns(lists.cooldown, opts.cooldownSeconds)
-            lists.cooldownMinutes = math.floor(opts.cooldownSeconds / 60)
-        end
+        lists.cooldownSeconds = opts.cooldownSeconds
     end
     return lists
 end
@@ -350,16 +390,18 @@ local function sendBlast(opts, lists, eligible, counts, total, singular, multipl
     local pool = total .. " " .. plural(total, singular, multiple)
 
     if sendCount == 0 then
-        fail("Nobody to whisper.", "None of " .. pool .. " are eligible.")
+        fail("Nobody to whisper.", "None of " .. pool .. " qualify.")
         ns.SkipLine(counts, total)
         return
     end
 
     -- One fact per line, in the order they matter: who hears it, who doesn't and why, what the lists recorded, then the message itself. The queue's counter picks up from there.
     local eta = ns.SendEta(sendCount * #ns.SplitWhisper(opts.text))
-    ok("Whispering", (sendCount == total and "all " or sendCount .. " of ") .. pool .. (eta and (", " .. eta) or "") .. ".")
+    local tail = eta and (", " .. eta) or ""
+    -- The cooldown rides on the opening line rather than taking one of its own: it is a property of this run, not an event in it.
+    if lists.cooldownSeconds then tail = tail .. ", " .. ns.Tint("cool", ns.FormatDuration(lists.cooldownSeconds) .. " cooldown") end
+    ok("Whispering", (sendCount == total and "all " or sendCount .. " of ") .. pool .. tail .. ".")
     ns.SkipLine(counts, total - sendCount)
-    ns.AppliedLine(sendCount, lists.skip ~= nil, lists.cooldownMinutes)
     ns.QuoteMessage(opts.text)
 
     local sentNames = track and {}
@@ -367,9 +409,8 @@ local function sendBlast(opts, lists, eligible, counts, total, singular, multipl
         local name = eligible[i]
         ns.QueueWhisper(opts.text, name)
         if sentNames then sentNames[#sentNames + 1] = name end
-        if lists.skip then lists.skip[name:lower()] = time() end
         -- Only a timed -cd records new recipients; bare -cd just reads the list.
-        if lists.cooldown and lists.cooldownMinutes then lists.cooldown[name] = time() end
+        if lists.cooldown and lists.cooldownSeconds then lists.cooldown[name:lower()] = time() + lists.cooldownSeconds end
     end
 
     -- /rr replies to these names once they whisper back.
@@ -379,7 +420,7 @@ end
 local function dispatchWho(opts)
     local count = C_FriendList.GetNumWhoResults()
     if count == 0 then
-        fail("No /who results.", "Run /who first.")
+        fail("No /who results.", "Run /who first, or use -who (…).")
         return
     end
 
@@ -387,7 +428,7 @@ local function dispatchWho(opts)
     local lists = loadLists(opts)
 
     -- Keys are the ones ns.SkipReasons reads, counted in the order the checks run.
-    local counts = { blocked = 0, skiplist = 0, cooldown = 0, filter = 0, group = 0, recentGroup = 0 }
+    local counts = { blocked = 0, cooldown = 0, filter = 0, group = 0, recentGroup = 0 }
     local eligible = {}
     for i = 1, count do
         local whoInfo = C_FriendList.GetWhoInfo(i)
@@ -402,9 +443,7 @@ local function dispatchWho(opts)
                 counts.blocked = counts.blocked + 1
             elseif isFiltered(whoInfo, opts.terms) or not isIncluded(whoInfo, opts.includeTerms) then
                 counts.filter = counts.filter + 1
-            elseif lists.skip and isIgnored(lists.skip, fullName) then
-                counts.skiplist = counts.skiplist + 1
-            elseif lists.cooldown and not isCool(lists.cooldown, fullName, opts.cooldownSeconds) then
+            elseif lists.cooldown and onCooldown(lists.cooldown, fullName) then
                 counts.cooldown = counts.cooldown + 1
             else
                 eligible[#eligible + 1] = fullName
@@ -445,7 +484,7 @@ local function runWho(opts)
         if count == 0 then return end
         stop()
         if total and total > count then
-            note(count .. " of " .. total .. " online match. Narrow the filter to reach the rest.")
+            note(count .. " of " .. total .. " matches shown. Narrow the filter for the rest.")
         end
         dispatchWho(opts)
     end)
@@ -453,7 +492,7 @@ local function runWho(opts)
     C_Timer.After(WHO_TIMEOUT, function()
         if settled then return end
         stop()
-        fail("Nobody found.", "\"" .. opts.who .. "\" came back empty, or /who was throttled. Try again in a few seconds.")
+        fail("Nobody found.", "\"" .. opts.who .. "\" came back empty or /who is throttled. Retry in a few seconds.")
     end)
     -- Restore on a fixed clock rather than on completion, because a straggling answer after the timeout would otherwise pop the panel.
     C_Timer.After(PANEL_RESTORE, restoreWhoUi)
@@ -461,46 +500,15 @@ local function runWho(opts)
     C_FriendList.SendWho(opts.who)
 end
 
--- -wait lets a one-click macro send /who then /ww: we hold the whisper until the next WHO_LIST_UPDATE brings the fresh results, with a timeout so a dropped update never leaves the command hanging.
-local function waitForWho(opts)
-    local waiter = CreateFrame("Frame")
-    local done = false
-    local function finish()
-        if done then return end
-        done = true
-        waiter:UnregisterEvent("WHO_LIST_UPDATE")
-        waiter:SetScript("OnEvent", nil)
-        dispatchWho(opts)
-    end
-    waiter:RegisterEvent("WHO_LIST_UPDATE")
-    -- A /who fires WHO_LIST_UPDATE twice: once to clear the old rows (still 0), then again when the server's results land. Wait for the one with results.
-    waiter:SetScript("OnEvent", function()
-        if C_FriendList.GetNumWhoResults() > 0 then finish() end
-    end)
-    -- Fallback: if nothing ever arrives, dispatch anyway so the command can't hang.
-    C_Timer.After(5, finish)
-end
-
 local function whisperWho(input)
     local opts = parseFlags(trim(input))
-    -- The -who diagnosis first: a filter that fell through leaves flags stranded in the message, and blaming those would hide the real mistake.
-    if opts.whoError then
-        fail("-who needs a filter.", "Terms are level ranges and keyed words (c- z- r- n- g-), e.g. /ww -who z-felwood c-warlock 50-60 LFM.")
-        return
-    end
-    if flagMistake(opts, "/ww -limit 10 LFM SM live", "/ww -cd 30 WTB Black Lotus") then return end
-    if opts.who and opts.wait then
-        fail("-wait doesn't combine with -who.", "-who runs its own /who and waits for the answer already.")
-        return
-    end
+    if flagMistake(opts, true) then return end
     if not opts.text or opts.text == "" then
-        note("Usage: /ww MESSAGE — whisper everyone in your current /who results. e.g. /ww LFM SM live. Type /ss for all options.")
+        note("Usage: /ww MESSAGE whispers your /who results, e.g. /ww LFM SM live. /ss lists every flag.")
         return
     end
     if opts.who then
         runWho(opts)
-    elseif opts.wait then
-        waitForWho(opts)
     else
         dispatchWho(opts)
     end
@@ -525,18 +533,18 @@ end
 
 local function whisperSellers(input)
     local opts = parseFlags(trim(input))
-    if flagMistake(opts, "/ws -limit 10 still selling?", "/ws -cd 30 still selling?") then return end
-    if opts.who or opts.whoError then
-        fail("-who doesn't apply to /ws.", "It whispers the sellers in the Browse tab, no /who involved.")
+    if flagMistake(opts, true) then return end
+    if usedWho(opts) then
+        fail("-who doesn't apply to /ws.", "It reads the Browse tab.")
         return
     end
     -- Sellers carry no class or zone, so the term filters can't apply here.
     if #opts.terms > 0 or #opts.includeTerms > 0 then
-        fail("-skip and -only don't apply to /ws.", "Sellers carry no class or zone data.")
+        fail("-skip and -only don't apply to /ws.", "Sellers carry no class or zone.")
         return
     end
     if not opts.text or opts.text == "" then
-        note("Usage: /ws MESSAGE — whisper every seller in the auction house Browse tab. e.g. /ws still selling your Black Lotus?")
+        note("Usage: /ws MESSAGE whispers every seller in the Browse tab, e.g. /ws still selling your Black Lotus?")
         return
     end
     if not AuctionFrame or not AuctionFrame:IsShown() then
@@ -545,19 +553,17 @@ local function whisperSellers(input)
     end
     local names = collectAuctionSellers()
     if not names or #names == 0 then
-        fail("No sellers", "in the current Browse results.")
+        fail("No sellers", "in the Browse results.")
         return
     end
 
     local lists = loadLists(opts)
-    local counts = { blocked = 0, skiplist = 0, cooldown = 0 }
+    local counts = { blocked = 0, cooldown = 0 }
     local eligible = {}
     for _, sellerName in ipairs(names) do
         if isBlocked(lists.blocked, sellerName) then
             counts.blocked = counts.blocked + 1
-        elseif lists.skip and isIgnored(lists.skip, sellerName) then
-            counts.skiplist = counts.skiplist + 1
-        elseif lists.cooldown and not isCool(lists.cooldown, sellerName, opts.cooldownSeconds) then
+        elseif lists.cooldown and onCooldown(lists.cooldown, sellerName) then
             counts.cooldown = counts.cooldown + 1
         else
             eligible[#eligible + 1] = sellerName
@@ -578,7 +584,7 @@ local function listBlocked()
         names[#names + 1] = shown
     end
     if #names == 0 then
-        note("Block list is empty. /ss -block NAME adds someone.")
+        note("Block list is empty.")
         return
     end
     table.sort(names)
@@ -597,7 +603,7 @@ local function blockName(name)
         return
     end
     blocked[key] = displayName(name)
-    ok("Blocked", blocked[key] .. ". No command will whisper them. /ss -unblock " .. blocked[key] .. " undoes it.")
+    ok("Blocked", blocked[key] .. ". /ss -unblock " .. blocked[key] .. " undoes it.")
 end
 
 local function unblockName(name)
@@ -612,38 +618,41 @@ local function unblockName(name)
     ok("Unblocked", shown .. ".")
 end
 
-local function ignoreName(name)
-    if name:find("%s") then
-        fail("One name at a time.", "e.g. /ss -ignore Thrall.")
+local MANUAL_COOLDOWN = 30 * 86400 -- /ss -cd NAME without a duration: the long memory the old ignore list gave.
+
+-- Put one player on cooldown by hand, the same list -cd sends build.
+local function cooldownName(arg)
+    local name, duration, extra = arg:match("^(%S+)%s*(%S*)%s*(.*)$")
+    if extra ~= "" then
+        fail("One name, then an optional duration.", "e.g. /ss -cd Thrall 30d.")
         return
     end
-    local skip = loadSkip()
-    local shown = displayName(name)
-    local key = name:lower()
-    if skip[key] then
-        note(shown .. " is already on the ignore list.")
-        return
+    local seconds = MANUAL_COOLDOWN
+    if duration ~= "" then
+        seconds = parseDuration(duration)
+        if not seconds then
+            fail("-cd needs a duration.", "\"" .. duration .. "\" isn't one. " .. DURATION_HINT)
+            return
+        end
     end
-    skip[key] = time()
-    ok("Ignoring", shown .. ". Sends with -ignore skip them. /ss -ignore clear empties the list.")
+    loadCooldowns()[name:lower()] = time() + seconds
+    ok("On cooldown", displayName(name) .. ", " .. ns.FormatDuration(seconds) .. ".")
 end
 
--- The ignore list runs into the thousands, so its size and age are the two facts worth knowing before deciding whether to clear it.
-local function ignoreStatus()
-    local skip = loadSkip()
-    local count, oldest = 0, nil
-    for _, stamp in pairs(skip) do
+-- The cooldown list runs into the thousands, so its size and its longest remaining wait are the two facts worth knowing before deciding whether to clear it.
+local function cooldownStatus()
+    local cooldowns = loadCooldowns()
+    local now = time()
+    local count, longest = 0, 0
+    for _, expiry in pairs(cooldowns) do
         count = count + 1
-        if not oldest or stamp < oldest then oldest = stamp end
+        if expiry - now > longest then longest = expiry - now end
     end
     if count == 0 then
-        note("Ignore list is empty. /ss -ignore NAME adds someone, and -ignore on a send fills it as it goes.")
+        note("Nobody is on cooldown.")
         return
     end
-    local days = math.floor((time() - oldest) / 86400)
-    local age = (days == 0) and "today" or (days .. " " .. plural(days, "day", "days") .. " ago")
-    note(count .. " on the ignore list, oldest added " .. age .. ". Entries age out after " .. IGNORE_DAYS
-        .. " days. /ss -ignore NAME adds one, /ss -ignore clear empties the list.")
+    note(count .. " on cooldown, longest " .. ns.FormatRemaining(longest) .. " left. /ss -cd clear empties it.")
 end
 
 local function quietCommand(arg)
@@ -655,14 +664,14 @@ local function quietCommand(arg)
     elseif arg == "off" then
         target = false
     else
-        note("Usage: /ss quiet — hide your own outgoing lines during a /ww or /ws run. /ss quiet on and /ss quiet off set it outright.")
+        note("Usage: /ss quiet toggles the counter, /ss quiet on and /ss quiet off set it.")
         return
     end
     ns.SetQuietBlasts(target)
     if target then
-        ok("Quiet mode on.", "A /ww or /ws run closes with its verdict instead of printing every whisper. /wt and /rr still show.")
+        ok("Quiet mode on.", "Runs show one counter instead of every whisper.")
     else
-        ok("Quiet mode off.", "Every outgoing whisper prints to chat again.")
+        ok("Quiet mode off.", "Every whisper prints again.")
     end
 end
 
@@ -677,29 +686,27 @@ local function adminCommand(input)
     elseif input:match("^%-block%s") then
         blockName(trim(raw:match("^%S+%s+(.*)$")))
     elseif input == "-unblock" then
-        note("Usage: /ss -unblock NAME — remove a player from the block list.")
+        note("Usage: /ss -unblock NAME.")
     elseif input:match("^%-unblock%s") then
         unblockName(trim(raw:match("^%S+%s+(.*)$")))
-    elseif input == "-ignore" then
-        ignoreStatus()
-    elseif input == "-ignore clear" then
-        clearSkip()
-        ok("Ignore list cleared.")
-    elseif input:match("^%-ignore%s") then
-        ignoreName(trim(raw:match("^%S+%s+(.*)$")))
+    elseif input == "-cd" then
+        cooldownStatus()
     elseif input == "-cd clear" then
         clearCooldowns()
-        ok("Cooldown history cleared.")
-    elseif input:match("^%-cd") then
-        note("Usage: /ss -cd clear — empty the cooldown history.")
+        ok("Cooldown list cleared.")
+    elseif input:match("^%-cd%s") then
+        cooldownName(trim(raw:match("^%S+%s+(.*)$")))
+    elseif input:match("^%-ignore") then
+        -- The old command still gets a pointer, so muscle memory lands somewhere useful.
+        note("-ignore is now -cd 30d. /ss -cd manages the list.")
     elseif input == "quiet" then
         quietCommand("")
     elseif input:match("^quiet%s") then
         quietCommand(trim(input:match("^%S+%s+(.*)$")))
     elseif input == "rate" then
-        note("Sending at " .. string.format("%.2f", ns.PacingRate()) .. " whispers per second, learned from the server. /ss rate reset restores the default.")
+        note("Send rate " .. string.format("%.2f", ns.PacingRate()) .. "/s, learned from the server. /ss rate reset restores the default.")
     elseif input == "rate reset" then
-        ok("Rate reset.", "Sending at " .. string.format("%.2f", ns.ResetPacingRate()) .. "/s until the server teaches otherwise.")
+        ok("Rate reset.", string.format("%.2f", ns.ResetPacingRate()) .. "/s until the server teaches otherwise.")
     elseif input == "stop" then
         local sent, dropped = ns.CancelQueue()
         if sent == 0 and dropped == 0 then
@@ -708,7 +715,7 @@ local function adminCommand(input)
             ok("Stopped.", sent .. " sent, " .. dropped .. " " .. plural(dropped, "whisper", "whispers") .. " cancelled.")
         end
     else
-        fail("Unknown command.", "\"" .. raw .. "\" isn't one. /ss opens the reference window.")
+        fail("Unknown command", "\"" .. raw .. "\". /ss opens the reference.")
     end
 end
 
@@ -735,6 +742,31 @@ colorWatch:SetScript("OnEvent", blendWhisperColors)
 -- Saved variables are never rewritten wholesale, so a removed feature's data sits in the file forever unless it is dropped by name. These two are all that is left of a chat scanner and a login banner.
 local DEAD_KEYS = { "chatScan", "showLoginBanner", "ignoredByChar", "ignored", "cooldownByChar" }
 
+local COOLDOWN_FORMAT = 2          -- Bumped when the cooldown list changes shape, so the conversion below runs once.
+local IGNORE_DAYS = 30             -- The old ignore list aged entries out after this long.
+local LEGACY_COOLDOWN_GRACE = 3600 -- Old cooldown stamps carried no duration; an hour keeps a run in progress honest without holding names for long.
+
+-- Cooldowns used to store the send time and apply the duration when read, and the ignore list was a separate 30-day memory. Both fold into one list of expiry times: ignore entries keep the rest of their 30 days, old cooldown stamps get an hour.
+local function migrateCooldowns(db)
+    if (db.cooldownFormat or 1) >= COOLDOWN_FORMAT then return end
+    local merged = {}
+    local function keep(name, expiry)
+        local key = name:lower()
+        merged[key] = math.max(merged[key] or 0, expiry)
+    end
+    for name, stamp in pairs(db.cooldownAccount or {}) do
+        if type(stamp) == "number" then keep(name, stamp + LEGACY_COOLDOWN_GRACE) end
+    end
+    for name, stamp in pairs(db.ignoredAccount or {}) do
+        if type(stamp) == "number" then keep(name, stamp + IGNORE_DAYS * 86400) end
+    end
+    db.cooldownAccount = merged
+    db.ignoredAccount = nil
+    db.cooldownFormat = COOLDOWN_FORMAT
+end
+
+ns.MigrateCooldowns = migrateCooldowns
+
 local dbCleanup = CreateFrame("Frame")
 dbCleanup:RegisterEvent("ADDON_LOADED")
 dbCleanup:SetScript("OnEvent", function(self, _, addon)
@@ -742,6 +774,7 @@ dbCleanup:SetScript("OnEvent", function(self, _, addon)
     self:UnregisterAllEvents()
     SuperSocialDB = SuperSocialDB or {}
     for _, key in ipairs(DEAD_KEYS) do SuperSocialDB[key] = nil end
+    migrateCooldowns(SuperSocialDB)
 end)
 
 SLASH_WHISPERTARGET1 = "/wt"

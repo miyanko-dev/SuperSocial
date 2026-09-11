@@ -72,28 +72,23 @@ local MANAGE = {
         eg = "/ss rate reset",
     },
     {
-        cmd = "/ss -ignore",
-        desc = "Show how many names are on the ignore list and how old the oldest one is.",
-        eg = "/ss -ignore",
+        cmd = "/ss -cd",
+        desc = "Show how many names are on cooldown and how long the longest one still runs.",
+        eg = "/ss -cd",
     },
     {
-        cmd = "/ss -ignore NAME",
-        desc = "Add a player to the ignore list by hand — the same list -ignore sends build.",
-        eg = "/ss -ignore Thrall",
-    },
-    {
-        cmd = "/ss -ignore clear",
-        desc = "Empty the ignore list.",
-        eg = "/ss -ignore clear",
+        cmd = "/ss -cd NAME",
+        desc = "Put a player on cooldown by hand — the same list -cd sends build. 30 days unless you add a duration.",
+        eg = "/ss -cd Thrall 2h",
     },
     {
         cmd = "/ss -cd clear",
-        desc = "Empty the cooldown history.",
+        desc = "Empty the cooldown list.",
         eg = "/ss -cd clear",
     },
     {
         cmd = "/ss -block NAME",
-        desc = "Block a player for good: no command ever whispers them. Account-wide; /ss -ignore clear leaves it alone.",
+        desc = "Block a player for good: no command ever whispers them. Account-wide; /ss -cd clear leaves it alone.",
         eg = "/ss -block Thrall",
     },
     {
@@ -127,46 +122,34 @@ local FLAGS = {
         eg = "/ww -limit 10 LFM SM live",
     },
     {
-        cmd = "-skip",
+        cmd = "-skip (…)",
         on = "/ww",
-        desc = "Skip anyone whose class, zone or name contains the word (Warrior, Maraudon, Xander, …). Separate several with commas.",
-        eg = "/ww -skip Warlock, Maraudon LFM healer",
+        desc = "Skip anyone whose class, zone or name contains a word in the brackets. Lead a word with c- z- n- to match only that field; quote phrases with spaces.",
+        eg = "/ww -skip (warlock z-maraudon) LFM healer",
     },
     {
-        cmd = "-only",
+        cmd = "-only (…)",
         on = "/ww",
-        desc = "The inverse of -skip: whisper only players matching a class, zone or name. Separate several with commas.",
-        eg = "/ww -only Priest, Paladin LFM healer",
+        desc = "The inverse of -skip: whisper only players matching a word in the brackets. Same c- z- n- keys. When a player matches both, -skip wins.",
+        eg = "/ww -only (priest c-paladin) LFM healer",
     },
     {
-        cmd = "-ignore",
+        cmd = "-cd D",
         on = "/ww, /wt, /ws",
-        desc = "Skip anyone on the ignore list, then add the people you whisper to it. Survives reloads, entries age out after 30 days; clear with /ss -ignore clear.",
-        eg = "/ww -ignore WTS enchant mats, whisper me",
-    },
-    {
-        cmd = "-cd M",
-        on = "/ww, /ws",
-        desc = "Skip anyone whispered in the last M minutes, then put new recipients on an M-minute cooldown.",
-        eg = "/ww -cd 30 WTB Black Lotus, paying 80g",
+        desc = "Skip anyone still on cooldown, then put new recipients on cooldown for D: minutes by default, or 30m, 2h, 30d. Account-wide, survives reloads; 30d is the long memory for a pitch nobody should hear twice.",
+        eg = "/ww -cd 30d WTS enchant mats, whisper me",
     },
     {
         cmd = "-cd",
         on = "/ww, /ws",
-        desc = "With no number, skip anyone already cooling down without recording the people you whisper.",
+        desc = "With no duration, skip anyone already cooling down without recording the people you whisper.",
         eg = "/ww -cd LFM SM live, need 1 tank",
     },
     {
-        cmd = "-who",
+        cmd = "-who (…)",
         on = "/ww",
-        desc = "Run the /who search yourself: results skip chat and the panel stays closed. The filter is level ranges and keyed terms (c- z- r- n- g-); the first word shaped like neither starts the message.",
-        eg = "/ww -who 57-59 c-warrior -cd 60 LFM tank for BRD",
-    },
-    {
-        cmd = "-wait",
-        on = "/ww",
-        desc = "Hold the whisper until fresh /who results arrive, for a two-line macro with its own /who. -who replaces this in one line.",
-        eg = "/ww -wait -limit 20 WTB Black Lotus",
+        desc = "Run the /who search yourself: results skip chat and the panel stays closed. The brackets take anything /who accepts (class, zone, name, level range, c- z- n- g- r- terms).",
+        eg = "/ww -who (warrior 57-59) -cd 60 LFM tank for BRD",
     },
     {
         cmd = ";",
@@ -177,9 +160,9 @@ local FLAGS = {
 }
 
 local FOOTER =
-    "Stack flags freely: /ww -limit 20 -skip Maraudon -cd 30 LFM tank for SM "
-    .. "whispers up to 20 people, skips anyone in Maraudon, and won't repeat within 30 minutes. "
-    .. "Flags go before the message."
+    "Stack flags freely: /ww -who (55-60) -limit 20 -skip (z-maraudon) -cd 30 LFM tank for SM "
+    .. "searches levels 55 to 60, whispers up to 20 of them, skips anyone in Maraudon, and won't repeat within 30 minutes. "
+    .. "Flags go before the message; anything with more than one word goes in brackets."
 
 -- Dialog-box header banner reconstructed from three texture pieces (left cap, repeating middle, right cap), matching the Target Finder title.
 local function buildTitleHeader(parent, text)

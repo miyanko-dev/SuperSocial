@@ -43,8 +43,7 @@ local function pasteQuest(quest)
     if not text or text == "" then return false end
 
     if not roomFor(body, text) then
-        fail("Macro is full.", "That quest link needs more than the "
-            .. (body:GetMaxLetters() - body:GetNumLetters()) .. " characters left in this macro.")
+        fail("Macro is full.", "The link needs more than the " .. (body:GetMaxLetters() - body:GetNumLetters()) .. " characters left.")
         return true
     end
 

@@ -2,7 +2,7 @@
 ## Title: Super Social
 ## Notes: Mass whisper and quick reply for WoW Classic 1.15.x.
 ## Author: MIYANKO
-## Version: 3.0.0
+## Version: 4.0.0
 ## IconTexture: 134149
 ## SavedVariables: SuperSocialDB
 

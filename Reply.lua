@@ -85,21 +85,21 @@ local function replyStatus(db)
         if fullName then waiting[#waiting + 1] = fullName end
     end
     if tracked == 0 then
-        note("Nothing tracked yet. Run /ww, then /rr replies to whoever whispers back. e.g. /rr invite incoming!")
+        note("Nothing tracked yet. /ww first, then /rr answers whoever whispers back.")
         return
     end
     local pending = #waiting
     if pending == 0 then
-        note("No unanswered replies from " .. tracked .. " tracked. /rr MESSAGE answers them as they come in.")
+        note("No unanswered replies, " .. tracked .. " tracked.")
         return
     end
-    local line = tint("sent", pending .. " unanswered " .. plural(pending, "reply", "replies")) .. " from " .. tracked .. " tracked."
+    local line = tint("sent", pending .. " unanswered") .. " of " .. tracked .. " tracked"
     -- Past a handful the names stop being scannable and the count is the useful part.
     if pending <= 10 then
         table.sort(waiting)
-        line = line .. " Waiting: " .. table.concat(waiting, ", ") .. "."
+        line = line .. ": " .. table.concat(waiting, ", ")
     end
-    note(line .. " /rr MESSAGE answers them all.")
+    note(line .. ".")
 end
 
 local function replyRecent(input)
@@ -114,18 +114,18 @@ local function replyRecent(input)
         wipe(db.pending)
         wipe(db.answered)
         wipe(db.seen)
-        ok("Reply tracking reset.", "Run /ww, then /rr replies to whoever whispers back.")
+        ok("Reply tracking reset.")
         return
     end
 
     local opts = ns.ParseFlags(input)
-    if ns.FlagMistake(opts, "/rr -limit 5 invite incoming") then return end
-    if opts.who or opts.whoError then
-        fail("-who doesn't apply to /rr.", "It replies to people who already whispered you, no /who involved.")
+    if ns.FlagMistake(opts, false) then return end
+    if ns.UsedWho(opts) then
+        fail("-who doesn't apply to /rr.", "It answers people who already whispered you.")
         return
     end
     if opts.useCooldown then
-        fail("-cd doesn't apply to /rr.", "Cooldowns only guard /ww and /ws.")
+        fail("-cd doesn't apply to /rr.", "Cooldowns guard /ww and /ws.")
         return
     end
     if not opts.text or opts.text == "" then
@@ -136,14 +136,14 @@ local function replyRecent(input)
     local trackedCount = 0
     for _ in pairs(db.whispered) do trackedCount = trackedCount + 1 end
     if trackedCount == 0 then
-        fail("No /ww whispers yet.", "Run /ww first, then /rr replies to whoever whispers back.")
+        fail("No /ww whispers yet.", "/rr answers replies to a /ww run.")
         return
     end
 
     local pending = 0
     for _ in pairs(db.pending) do pending = pending + 1 end
     if pending == 0 then
-        fail("No unanswered replies", "from your /ww whispers (" .. trackedCount .. " tracked).")
+        fail("No unanswered replies.", trackedCount .. " tracked.")
         return
     end
 
@@ -181,7 +181,7 @@ local function replyRecent(input)
     local pool = pending .. " unanswered " .. plural(pending, "reply", "replies")
 
     if sendCount == 0 then
-        fail("Nobody to reply to.", "None of " .. pool .. " are eligible.")
+        fail("Nobody to reply to.", "None of " .. pool .. " qualify.")
         ns.SkipLine(skipCounts, pending)
         return
     end

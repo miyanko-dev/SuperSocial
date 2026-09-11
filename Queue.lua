@@ -180,7 +180,7 @@ local function drainPaced()
         local rate = pacingRate()
         if not pacedNoticed then
             pacedNoticed = true
-            ns.Note(ns.Tint("cool", "Burst budget spent.") .. " Pacing the remaining " .. #pending .. " at " .. string.format("%.2f", rate) .. "/s so the server keeps accepting.")
+            ns.Note(ns.Tint("cool", "Burst spent.") .. " Pacing " .. #pending .. " more at " .. string.format("%.2f", rate) .. "/s.")
         end
         -- Floor the delay so float dust just under a whole token can't arm a same-frame timer.
         pacer = C_Timer.NewTimer(math.max((1 - tokens) / rate, 0.05), drainPaced)
@@ -214,9 +214,9 @@ end
 local function giveUp(whisper)
     if whisper.kind == "reply" then
         ns.ReopenReply(whisper.target)
-        ns.Fail("Couldn't send the reply to " .. whisper.target .. ".", "They're back on the /rr list.")
+        ns.Fail("Reply to " .. whisper.target .. " failed.", "Back on the /rr list.")
     else
-        ns.Fail("Gave up on whispering " .. whisper.target, "after " .. MAX_TRIES .. " tries.")
+        ns.Fail("Gave up on " .. whisper.target, "after " .. MAX_TRIES .. " tries.")
     end
 end
 
@@ -321,7 +321,7 @@ local function abortEpisode()
     probing = false
     cancelPause()
     capCycles = 0
-    ns.Fail("Whisper cap never lifted.", lost .. " unsent after " .. math.floor(MAX_CAP_CYCLES * CAP_PAUSE / 60) .. " minutes. Replies went back to the /rr list.")
+    ns.Fail("Cap never lifted.", lost .. " unsent after " .. math.floor(MAX_CAP_CYCLES * CAP_PAUSE / 60) .. " min. Replies are back on the /rr list.")
     closeRun()
 end
 
@@ -370,7 +370,7 @@ local function onThrottled()
     setPacingRate(pacingRate() * 0.5)
     if pacer then pacer:Cancel() end
     pacer = nil
-    ns.Note(ns.Tint("skip", "Whisper cap hit.") .. " " .. delivered .. " of " .. queued .. " sent so far, slowing to " .. string.format("%.2f", pacingRate()) .. "/s and pausing " .. CAP_PAUSE .. "s.")
+    ns.Note(ns.Tint("skip", "Whisper cap hit.") .. " " .. delivered .. "/" .. queued .. " sent, slowing to " .. string.format("%.2f", pacingRate()) .. "/s, pausing " .. CAP_PAUSE .. "s.")
     capTimer = C_Timer.NewTimer(CAP_PAUSE, probeAfterPause)
 end
 
@@ -394,7 +394,7 @@ local function purgeTarget(name)
         end
     end
     if removed > 0 then
-        ns.Fail("Skipping " .. short .. ".", "Unreachable, removed from this run.")
+        ns.Fail("Skipped " .. short .. ".", "Unreachable.")
         showProgress()
     end
     if #unconfirmed == 0 and #pending == 0 then
@@ -463,7 +463,7 @@ function ns.QueueWhisper(text, target, kind)
         if #part > MAX_MESSAGE_LEN then
             if part ~= warnedText then
                 warnedText = part
-                ns.Fail("Whisper too long.", #part .. " characters, the limit is " .. MAX_MESSAGE_LEN .. ". Skipped.")
+                ns.Fail("Whisper too long.", #part .. " of " .. MAX_MESSAGE_LEN .. " characters, skipped.")
             end
         else
             pending[#pending + 1] = { text = part, target = target, kind = kind, tries = 0 }
@@ -475,7 +475,7 @@ function ns.QueueWhisper(text, target, kind)
         if not noticeTimer then
             noticeTimer = C_Timer.NewTimer(0, function()
                 noticeTimer = nil
-                ns.Note(ns.Tint("cool", "Cap active.") .. " " .. #pending .. " queued until the server accepts again.")
+                ns.Note(ns.Tint("cool", "Cap active.") .. " " .. #pending .. " queued.")
             end)
         end
     elseif not collector and not pacer then
