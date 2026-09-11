@@ -4,7 +4,7 @@ local _, ns = ...
 --   yellow  the [Super Social] tag, nothing else
 --   green   what went out, and actions that completed
 --   red     what didn't go out, and everyone excluded
---   blue    list bookkeeping: cooldowns, the ignore list, the whisper cap
+--   blue    list bookkeeping: cooldowns, the whisper cap
 -- A line colours its lead token only and leaves the body white, so the eye lands on the same spot every time. The single exception is a line reporting a mix of outcomes, where each count takes its own colour.
 local COLORS = {
     sent = "ff40ff40", -- green — positive: whispers sent, actions completed
@@ -58,11 +58,10 @@ local function skipReasons(counts)
         if n and n > 0 then parts[#parts + 1] = n .. " " .. label end
     end
     add(counts.blocked, "blocked")
-    add(counts.skiplist, "on the ignore list")
     add(counts.cooldown, "on cooldown")
-    add(counts.filter, "filtered out")
+    add(counts.filter, "filtered")
     add(counts.group, "in your group")
-    add(counts.recentGroup, "recently in your group")
+    add(counts.recentGroup, "recently grouped")
     add(counts.limit, "over the limit")
     if #parts == 0 then return nil end
     return table.concat(parts, ", ")
@@ -79,17 +78,20 @@ local function skipLine(counts, skipped)
     end
 end
 
--- What the run wrote to the persistent lists, on its own line. Silent unless -ignore or a timed -cd recorded something.
-local function appliedLine(count, addedToSkip, cooldownMinutes)
-    local parts = {}
-    if addedToSkip then
-        parts[#parts + 1] = count .. " added to the ignore list"
-    end
-    if cooldownMinutes then
-        parts[#parts + 1] = count .. " on cooldown for " .. cooldownMinutes .. " min"
-    end
-    if #parts == 0 then return end
-    report("cool", "Recorded:", table.concat(parts, ", ") .. ".")
+-- A duration in the largest unit that divides it evenly, so 30d reads back as "30 d" and 90 minutes as "90 min" rather than "1.5 h".
+local function formatDuration(seconds)
+    if seconds % 86400 == 0 then return math.floor(seconds / 86400) .. " d" end
+    if seconds % 3600 == 0 then return math.floor(seconds / 3600) .. " h" end
+    if seconds % 60 == 0 then return math.floor(seconds / 60) .. " min" end
+    return seconds .. " s"
+end
+
+-- A remaining wait rounded up to its largest unit, for status lines where "29 d" says more than the exact second count.
+local function formatRemaining(seconds)
+    if seconds >= 86400 then return math.ceil(seconds / 86400) .. " d" end
+    if seconds >= 3600 then return math.ceil(seconds / 3600) .. " h" end
+    if seconds >= 60 then return math.ceil(seconds / 60) .. " min" end
+    return math.max(seconds, 0) .. " s"
 end
 
 ns.Tint = tint
@@ -101,4 +103,5 @@ ns.QuoteMessage = quoteMessage
 ns.Plural = plural
 ns.SkipReasons = skipReasons
 ns.SkipLine = skipLine
-ns.AppliedLine = appliedLine
+ns.FormatDuration = formatDuration
+ns.FormatRemaining = formatRemaining
