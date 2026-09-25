@@ -1,14 +1,24 @@
-## Interface: 11509
+## Interface: 11509, 16001
 ## Title: Super Social
-## Notes: Mass whisper and quick reply for WoW Classic 1.15.x.
-## Author: MIYANKO
-## Version: 4.0.0
+## Notes: Mass whisper and quick reply for WoW Classic 1.15.x and WoW Forever 1.60.x.
+## Author: miyanko
+## Version: 4.1.0
 ## IconTexture: 134149
 ## SavedVariables: SuperSocialDB
 
-Format.lua
-Queue.lua
-QuestMacro.lua
-Help.lua
-Whisper.lua
-Reply.lua
+# One toc for both clients. A second, flavour-suffixed toc would duplicate this file list for nothing:
+# no code branches on which toc loaded, every client difference is detected at runtime in Core/Compat.lua,
+# and a duplicated list only invites the two copies to drift apart.
+# Load order is the dependency order: Core exports ns.* before Commands and UI read it.
+
+Core\Compat.lua
+Core\Names.lua
+Core\Format.lua
+Core\Lists.lua
+Core\Group.lua
+Core\Flags.lua
+Core\Queue.lua
+Commands\Whisper.lua
+Commands\Reply.lua
+Commands\Admin.lua
+UI\Help.lua

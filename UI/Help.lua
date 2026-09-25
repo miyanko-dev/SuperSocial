@@ -1,13 +1,12 @@
 local _, ns = ...
 
--- A scrollable reference panel for every command and option, opened with "/ss". Styled after the Target Finder panel so the two addons read as one family: dialog-box backdrop, header banner, and bordered section containers.
+-- A scrollable reference panel for every command and option, opened with "/ss". Built entirely from the game's own templates and font objects, each defined per client, so it wears Era's or Forever's own chrome, scroll bar and type instead of assuming a texture path exists on both.
 
 local PANEL_WIDTH = 480
 local PANEL_HEIGHT = 580
-local PANEL_PAD = 14
-local PANEL_PAD_TOP = 52       -- clears the dialog-box-header banner
-local PANEL_PAD_BOTTOM = 14
-local SCROLLBAR_GUTTER = 22    -- room for the scroll bar the template hangs outside its right edge
+local INSET_MARGINS = 4 + 6    -- BasicFrameTemplateWithInset's InsetBg sits 4px in on the left and 6px on the right, on both clients
+local INSET_PAD = 8            -- content sits this far inside that well, which also keeps Era's scroll bar (drawn 7px above the frame, Classic/ScrollDefine.lua) inside it
+local SCROLLBAR_GUTTER = 28    -- ScrollFrameTemplate hangs its bar off the frame's right edge: 8px wide at +6 on Forever (MinimalScrollBar), 25px at -2 on Era (WowClassicScrollBar)
 local SECTION_GAP = 26         -- also clears the section label riding above each box
 local SECTION_INNER_PAD = 12
 local SECTION_LABEL_LIFT = 7
@@ -15,9 +14,20 @@ local LABEL_WIDTH = 116
 local COLUMN_GAP = 12
 local ROW_GAP = 10
 
-local YELLOW = "|cffffd200"
+-- /ws only exists where the Era auction house still names sellers (Core/Compat.lua), so the reference names it only there.
+local function available(command)
+    return command ~= "/ws" or ns.AuctionSellers ~= nil
+end
 
--- The panel is four sections: the slash commands, the click shortcuts, the /ss management subcommands, then the flags that refine /ww. "cmd" is the yellow left-column label; "eg" carries the full worked example so the column stays scannable.
+local function commandList(commands)
+    local shown = {}
+    for _, command in ipairs(commands) do
+        if available(command) then shown[#shown + 1] = command end
+    end
+    return table.concat(shown, ", ")
+end
+
+-- The panel is three sections: the slash commands, the /ss management subcommands, then the flags that refine /ww. "cmd" is the yellow left-column label; "eg" carries the full worked example so the column stays scannable.
 local INTRO =
     "Run /who, then /ww whispers everyone in the results — that's the core idea. "
     .. "The flags below refine who hears it, and they stack in any order before the message. "
@@ -35,7 +45,7 @@ local COMMANDS = {
     },
     {
         cmd = "/ws",
-        desc = "Whisper every seller in the auction house Browse tab.",
+        desc = "Whisper every seller on the auction house Browse page.",
         eg = "/ws still selling your Black Lotus?",
     },
     {
@@ -53,12 +63,12 @@ local COMMANDS = {
 local MANAGE = {
     {
         cmd = "/ss stop",
-        desc = "Cancel any whispers still queued to send.",
+        desc = "Cancel any whispers still queued to send. Anyone you were mid-reply to goes back on the /rr list.",
         eg = "/ss stop",
     },
     {
         cmd = "/ss quiet",
-        desc = "Replace your own outgoing lines during a run with one Y/Z counter that ticks in place, so the replies they draw aren't buried. The run still names the message it sends, and closes with its verdict on a fresh line at the bottom. Covers /ww, /ws and /rr; /wt always prints. On by default. /ss quiet on and /ss quiet off set it outright.",
+        desc = "Replace your own outgoing lines during a run with one Y/Z counter that ticks in place, so the replies they draw aren't buried. The run still names the message it sends, and closes with its verdict on a fresh line at the bottom. Covers every bulk command; /wt always prints. On by default. /ss quiet on and /ss quiet off set it outright.",
         eg = "/ss quiet",
     },
     {
@@ -103,57 +113,46 @@ local MANAGE = {
     },
 }
 
-local SHORTCUTS = {
-    {
-        cmd = "Shift-click",
-        desc = "With the macro window open and no chat box waiting, paste a Questie tracker quest into the macro body instead of untracking it.",
-        eg = "Shift-click a tracked quest while editing a macro",
-    },
-}
-
-local SHORTCUT_TARGETS =
-    "The Questie paste needs the macro window open with a macro selected; an open chat box always gets the link first."
-
 local FLAGS = {
     {
         cmd = "-limit N",
-        on = "/ww, /rr, /ws",
+        on = { "/ww", "/rr", "/ws" },
         desc = "Whisper only the first N recipients.",
         eg = "/ww -limit 10 LFM SM live",
     },
     {
         cmd = "-skip (…)",
-        on = "/ww",
+        on = { "/ww" },
         desc = "Skip anyone whose class, zone or name contains a word in the brackets. Lead a word with c- z- n- to match only that field; quote phrases with spaces.",
         eg = "/ww -skip (warlock z-maraudon) LFM healer",
     },
     {
         cmd = "-only (…)",
-        on = "/ww",
+        on = { "/ww" },
         desc = "The inverse of -skip: whisper only players matching a word in the brackets. Same c- z- n- keys. When a player matches both, -skip wins.",
         eg = "/ww -only (priest c-paladin) LFM healer",
     },
     {
         cmd = "-cd D",
-        on = "/ww, /wt, /ws",
+        on = { "/ww", "/wt", "/ws" },
         desc = "Skip anyone still on cooldown, then put new recipients on cooldown for D: minutes by default, or 30m, 2h, 30d. Account-wide, survives reloads; 30d is the long memory for a pitch nobody should hear twice.",
         eg = "/ww -cd 30d WTS enchant mats, whisper me",
     },
     {
         cmd = "-cd",
-        on = "/ww, /ws",
+        on = { "/ww", "/ws" },
         desc = "With no duration, skip anyone already cooling down without recording the people you whisper.",
         eg = "/ww -cd LFM SM live, need 1 tank",
     },
     {
         cmd = "-who (…)",
-        on = "/ww",
+        on = { "/ww" },
         desc = "Run the /who search yourself: results skip chat and the panel stays closed. The brackets take anything /who accepts (class, zone, name, level range, c- z- n- g- r- terms).",
         eg = "/ww -who (warrior 57-59) -cd 60 LFM tank for BRD",
     },
     {
         cmd = ";",
-        on = "/ww, /wt, /ws, /rr",
+        on = { "/ww", "/wt", "/ws", "/rr" },
         desc = "Split the message: each recipient gets every part as its own whisper, back to back.",
         eg = "/ww Hey, how are you? ; up for tanking Scholo?",
     },
@@ -164,53 +163,12 @@ local FOOTER =
     .. "searches levels 55 to 60, whispers up to 20 of them, skips anyone in Maraudon, and won't repeat within 30 minutes. "
     .. "Flags go before the message; anything with more than one word goes in brackets."
 
--- Dialog-box header banner reconstructed from three texture pieces (left cap, repeating middle, right cap), matching the Target Finder title.
-local function buildTitleHeader(parent, text)
-    local HEADER_TEXTURE = "Interface\\DialogFrame\\UI-DialogBox-Header"
-
-    local mid = parent:CreateTexture(nil, "OVERLAY")
-    mid:SetTexture(HEADER_TEXTURE)
-    mid:SetTexCoord(0.31, 0.67, 0, 0.63)
-    mid:SetPoint("TOP", parent, "TOP", 0, 12)
-    mid:SetHeight(40)
-
-    local left = parent:CreateTexture(nil, "OVERLAY")
-    left:SetTexture(HEADER_TEXTURE)
-    left:SetTexCoord(0.21, 0.31, 0, 0.63)
-    left:SetPoint("RIGHT", mid, "LEFT")
-    left:SetWidth(30)
-    left:SetHeight(40)
-
-    local right = parent:CreateTexture(nil, "OVERLAY")
-    right:SetTexture(HEADER_TEXTURE)
-    right:SetTexCoord(0.67, 0.77, 0, 0.63)
-    right:SetPoint("LEFT", mid, "RIGHT")
-    right:SetWidth(30)
-    right:SetHeight(40)
-
-    local title = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    title:SetPoint("TOP", mid, "TOP", 0, -14)
-    title:SetText(text)
-
-    mid:SetWidth((title:GetStringWidth() or 0) + 10)
-end
-
--- Bordered section container with its yellow label riding on the top edge, matching the Target Finder sections.
+-- Bordered section container, the game's own inset box, with its yellow label riding on the top edge.
 local function buildSection(parent, labelText)
-    local section = CreateFrame("Frame", nil, parent, "BackdropTemplate")
-    section:SetBackdrop({
-        bgFile = "Interface\\ChatFrame\\ChatFrameBackground",
-        edgeFile = "Interface\\Tooltips\\UI-Tooltip-Border",
-        tile = true,
-        tileSize = 16,
-        edgeSize = 16,
-        insets = { left = 3, right = 3, top = 5, bottom = 3 },
-    })
-    section:SetBackdropColor(0.1, 0.1, 0.1, 0.5)
-    section:SetBackdropBorderColor(0.4, 0.4, 0.4)
+    local section = CreateFrame("Frame", nil, parent, "InsetFrameTemplate")
 
     local label = section:CreateFontString(nil, "OVERLAY", "GameFontNormal")
-    label:SetPoint("BOTTOMLEFT", section, "TOPLEFT", 12, SECTION_LABEL_LIFT)
+    label:SetPoint("BOTTOMLEFT", section, "TOPLEFT", 4, SECTION_LABEL_LIFT)
     label:SetText(labelText)
 
     return section
@@ -230,14 +188,14 @@ local function buildRow(section, y, width, label, body)
     right:SetPoint("TOPLEFT", bodyLeft, -y - 1)
     right:SetWidth(width - bodyLeft - SECTION_INNER_PAD)
     right:SetJustifyH("LEFT")
-    right:SetSpacing(2)
     right:SetText(body)
 
     return math.max(left:GetStringHeight(), right:GetStringHeight())
 end
 
+-- Examples take Blizzard's own gold, the colour GameFontNormal draws in.
 local function exampleLine(text)
-    return "e.g.  " .. YELLOW .. text .. "|r"
+    return "e.g.  " .. NORMAL_FONT_COLOR:WrapTextInColorCode(text)
 end
 
 -- Lay one section's entries and return the section frame with its height set.
@@ -245,7 +203,9 @@ local function layoutSection(content, width, labelText, entries, describe)
     local section = buildSection(content, labelText)
     local y = SECTION_INNER_PAD
     for _, entry in ipairs(entries) do
-        y = y + buildRow(section, y, width, entry.cmd, describe(entry)) + ROW_GAP
+        if available(entry.cmd) then
+            y = y + buildRow(section, y, width, entry.cmd, describe(entry)) + ROW_GAP
+        end
     end
     section:SetHeight(y - ROW_GAP + SECTION_INNER_PAD)
     return section
@@ -254,10 +214,9 @@ end
 -- Full-width white note, used for the intro and the closing combination example.
 local function buildNote(content, y, width, text)
     local note = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    note:SetPoint("TOPLEFT", PANEL_PAD, -y)
-    note:SetWidth(width - PANEL_PAD * 2)
+    note:SetPoint("TOPLEFT", SECTION_INNER_PAD, -y)
+    note:SetWidth(width - SECTION_INNER_PAD * 2)
     note:SetJustifyH("LEFT")
-    note:SetSpacing(2)
     note:SetText(text)
     return note:GetStringHeight()
 end
@@ -265,38 +224,30 @@ end
 local helpFrame
 
 local function buildFrame()
-    local panel = CreateFrame("Frame", "SuperSocialHelpFrame", UIParent, "BackdropTemplate")
+    -- The game's own titled window: title bar, borders, close button and content inset come with the template, which each client defines in its own UIPanelTemplates.xml.
+    local panel = CreateFrame("Frame", "SuperSocialHelpFrame", UIParent, "BasicFrameTemplateWithInset")
     panel:SetSize(PANEL_WIDTH, PANEL_HEIGHT)
     panel:SetPoint("CENTER")
     panel:SetFrameStrata("DIALOG")
+    panel:SetToplevel(true)
     panel:SetClampedToScreen(true)
     panel:SetMovable(true)
     panel:EnableMouse(true)
     panel:RegisterForDrag("LeftButton")
     panel:SetScript("OnDragStart", panel.StartMoving)
     panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
-    panel:SetBackdrop({
-        bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-        edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-        tile = true,
-        tileSize = 32,
-        edgeSize = 32,
-        insets = { left = 8, right = 8, top = 8, bottom = 8 },
-    })
+    panel.TitleText:SetText("Super Social")
     tinsert(UISpecialFrames, "SuperSocialHelpFrame")
 
-    buildTitleHeader(panel, "Super Social")
+    -- ScrollFrameTemplate builds SCROLL_FRAME_SCROLL_BAR_TEMPLATE, which each client's ScrollDefine.lua names, so the bar is Blizzard's current one on both instead of the legacy UIPanelScrollFrame art.
+    local scroll = CreateFrame("ScrollFrame", "SuperSocialHelpScroll", panel, "ScrollFrameTemplate")
+    scroll:SetPoint("TOPLEFT", panel.InsetBg, "TOPLEFT", INSET_PAD, -INSET_PAD)
+    scroll:SetPoint("BOTTOMRIGHT", panel.InsetBg, "BOTTOMRIGHT", -SCROLLBAR_GUTTER, INSET_PAD)
 
-    local cornerClose = CreateFrame("Button", nil, panel, "UIPanelCloseButton")
-    cornerClose:SetPoint("TOPRIGHT", panel, "TOPRIGHT", -6, -6)
-
-    local scroll = CreateFrame("ScrollFrame", "SuperSocialHelpScroll", panel, "UIPanelScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", PANEL_PAD, -PANEL_PAD_TOP)
-    scroll:SetPoint("BOTTOMRIGHT", -PANEL_PAD - SCROLLBAR_GUTTER, PANEL_PAD_BOTTOM)
-
+    -- The scroll child needs its width before any text wraps, and the template's fixed inset margins make it computable up front.
     local content = CreateFrame("Frame", nil, scroll)
     scroll:SetScrollChild(content)
-    local width = scroll:GetWidth()
+    local width = PANEL_WIDTH - INSET_MARGINS - INSET_PAD - SCROLLBAR_GUTTER
     content:SetWidth(width)
 
     local y = 4
@@ -306,24 +257,18 @@ local function buildFrame()
 
     local sections = {
         { label = "Commands", entries = COMMANDS, describe = withExample },
-        { label = "Shortcuts", entries = SHORTCUTS, describe = withExample, note = SHORTCUT_TARGETS },
         { label = "Manage", entries = MANAGE, describe = withExample },
-        { label = "Flags", entries = FLAGS, describe = function(e) return e.desc .. "  (" .. e.on .. ")\n" .. exampleLine(e.eg) end },
+        { label = "Flags", entries = FLAGS, describe = function(e) return e.desc .. "  (" .. commandList(e.on) .. ")\n" .. exampleLine(e.eg) end },
     }
     for _, spec in ipairs(sections) do
         local section = layoutSection(content, width, spec.label, spec.entries, spec.describe)
         section:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
         section:SetPoint("TOPRIGHT", content, "TOPRIGHT", 0, -y)
-        y = y + section:GetHeight()
-        -- A section note sits tight under its box, not a full section gap away.
-        if spec.note then
-            y = y + ROW_GAP + buildNote(content, y + ROW_GAP, width, spec.note)
-        end
-        y = y + SECTION_GAP
+        y = y + section:GetHeight() + SECTION_GAP
     end
 
     y = y + buildNote(content, y, width, FOOTER)
-    content:SetHeight(y + PANEL_PAD_BOTTOM)
+    content:SetHeight(y + SECTION_INNER_PAD)
 
     panel:Hide()
     helpFrame = panel

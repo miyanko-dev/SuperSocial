@@ -10,22 +10,24 @@ local plural = ns.Plural
 
 -- Tracking lives in the saved variables, so a /reload mid-session can't drop the people still waiting on an answer. Entries age out after TRACK_MINUTES, because a reply is an LFM conversation: past that window it's stale and answering it would read as spam, not as a reply.
 local TRACK_MINUTES = 15
+local TRACKING_FORMAT = 2 -- Bumped when the tracking keys change shape. Older records are dropped, not converted: they age out within TRACK_MINUTES anyway.
 
 local tracking
 
 local function pruneTracking(db)
     local cutoff = time() - TRACK_MINUTES * 60
-    for short, at in pairs(db.seen) do
+    for key, at in pairs(db.seen) do
         if at < cutoff then
-            db.seen[short] = nil
-            db.whispered[short] = nil
-            db.pending[short] = nil
-            db.answered[short] = nil
+            db.seen[key] = nil
+            db.whispered[key] = nil
+            db.pending[key] = nil
+            db.answered[key] = nil
         end
     end
+
     -- A record a fresh blast keeps alive can still hold an old reply; the window applies to the reply itself, not just the record.
-    for short, at in pairs(db.pending) do
-        if at < cutoff then db.pending[short] = nil end
+    for key, at in pairs(db.pending) do
+        if at < cutoff then db.pending[key] = nil end
     end
 end
 
@@ -34,34 +36,41 @@ local function loadTracking()
     SuperSocialDB = SuperSocialDB or {}
     local db = SuperSocialDB.replies or {}
     SuperSocialDB.replies = db
-    db.whispered = db.whispered or {}  -- short name -> the full "Name-Realm" we whispered
-    db.pending = db.pending or {}      -- short name -> time of their still-unanswered reply
-    db.answered = db.answered or {}    -- short name -> true once answered; a fresh /ww clears it
-    db.seen = db.seen or {}            -- short name -> last time we whispered them or they wrote back, the clock the age-out runs on
+    if db.keyFormat ~= TRACKING_FORMAT then
+        db.whispered, db.pending, db.answered, db.seen = {}, {}, {}, {}
+        db.keyFormat = TRACKING_FORMAT
+    end
+    db.whispered = db.whispered or {}  -- name key -> the name exactly as we whispered it
+    db.pending = db.pending or {}      -- name key -> time of their still-unanswered reply
+    db.answered = db.answered or {}    -- name key -> true once answered; a fresh /ww clears it
+    db.seen = db.seen or {}            -- name key -> last time we whispered them or they wrote back, the clock the age-out runs on
     pruneTracking(db)
     tracking = db
     return db
 end
 
+-- The tracked key for a name in any spelling: the echo, the incoming whisper and the /who row may each write the same player differently.
+local function trackedKey(db, name)
+    return ns.FindKeyScan(db.whispered, name)
+end
+
 -- A reply the queue couldn't deliver goes back on the unanswered list, so the next /rr picks that person up again.
 function ns.ReopenReply(fullName)
-    local short = ns.NameOnly(fullName)
-    if not short then return end
     local db = loadTracking()
-    if not db.whispered[short] then return end
-    db.answered[short] = nil
-    db.pending[short] = time()
-    db.seen[short] = time()
+    local key = trackedKey(db, fullName)
+    if not key then return end
+    db.answered[key] = nil
+    db.pending[key] = time()
+    db.seen[key] = time()
 end
 
 -- The queue classifies every outgoing whisper and reports it here, so ownership is never inferred from a counter. A blast clears their pending reply; only a personal whisper answers them for good.
 function ns.OnWhisperDelivered(fullName, personal)
-    local short = ns.NameOnly(fullName)
-    if not short then return end
     local db = loadTracking()
-    if not db.whispered[short] then return end
-    db.pending[short] = nil
-    if personal then db.answered[short] = true end
+    local key = trackedKey(db, fullName)
+    if not key then return end
+    db.pending[key] = nil
+    if personal then db.answered[key] = true end
 end
 
 -- Called by /ww after a send: recipients accumulate across blasts. A fresh blast re-arms anyone /rr already answered — new solicitation, new exchange.
@@ -69,10 +78,12 @@ function ns.TrackWhispered(names)
     local db = loadTracking()
     local now = time()
     for _, fullName in ipairs(names) do
-        local short = ns.NameOnly(fullName)
-        db.whispered[short] = fullName
-        db.answered[short] = nil
-        db.seen[short] = now
+        local key = trackedKey(db, fullName) or ns.NameKey(fullName)
+        if key then
+            db.whispered[key] = fullName
+            db.answered[key] = nil
+            db.seen[key] = now
+        end
     end
 end
 
@@ -80,8 +91,8 @@ end
 local function replyStatus(db)
     local tracked, waiting = 0, {}
     for _ in pairs(db.whispered) do tracked = tracked + 1 end
-    for short in pairs(db.pending) do
-        local fullName = db.whispered[short]
+    for key in pairs(db.pending) do
+        local fullName = db.whispered[key]
         if fullName then waiting[#waiting + 1] = fullName end
     end
     if tracked == 0 then
@@ -103,7 +114,7 @@ local function replyStatus(db)
 end
 
 local function replyRecent(input)
-    input = (input or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    input = ns.Trim(input)
 
     local db = loadTracking()
     pruneTracking(db)
@@ -125,13 +136,14 @@ local function replyRecent(input)
         return
     end
     if opts.useCooldown then
-        fail("-cd doesn't apply to /rr.", "Cooldowns guard /ww and /ws.")
+        fail("-cd doesn't apply to /rr.", "Cooldowns guard /ww and /wt.")
         return
     end
     if not opts.text or opts.text == "" then
         replyStatus(db)
         return
     end
+    if ns.RefuseRestricted() then return end
 
     local trackedCount = 0
     for _ in pairs(db.whispered) do trackedCount = trackedCount + 1 end
@@ -152,20 +164,22 @@ local function replyRecent(input)
 
     local skippedGroup, skippedRecentGroup, skippedBlocked = 0, 0, 0
     local eligible = {}
-    for short in pairs(db.pending) do
-        if groupSet[short] then
+    for key in pairs(db.pending) do
+        local fullName = db.whispered[key]
+        if ns.InGroup(groupSet, fullName) then
             skippedGroup = skippedGroup + 1
-        elseif ns.WasRecentlyGrouped(short) then
+        elseif ns.WasRecentlyGrouped(fullName) then
             skippedRecentGroup = skippedRecentGroup + 1
-        elseif ns.IsBlocked(blocked, db.whispered[short]) then
+        elseif ns.IsBlocked(blocked, fullName) then
             skippedBlocked = skippedBlocked + 1
         else
-            eligible[#eligible + 1] = db.whispered[short]
+            eligible[#eligible + 1] = key
         end
     end
+
     -- Newest reply first, so a -limit keeps the most recent repliers.
     table.sort(eligible, function(a, b)
-        return db.pending[ns.NameOnly(a)] > db.pending[ns.NameOnly(b)]
+        return db.pending[a] > db.pending[b]
     end)
 
     local sendCount = opts.limit and math.min(opts.limit, #eligible) or #eligible
@@ -192,13 +206,12 @@ local function replyRecent(input)
     ns.SkipLine(skipCounts, pending - sendCount)
     ns.QuoteMessage(opts.text)
     for i = 1, sendCount do
-        local fullName = eligible[i]
-        ns.QueueWhisper(opts.text, fullName, "reply")
+        local key = eligible[i]
+        ns.QueueWhisper(opts.text, db.whispered[key], "reply")
 
         -- Answered by /rr is sticky, so their follow-up whispers won't re-queue them. Clear pending eagerly too; a reply the queue fails to deliver reopens via ns.ReopenReply.
-        local short = ns.NameOnly(fullName)
-        db.answered[short] = true
-        db.pending[short] = nil
+        db.answered[key] = true
+        db.pending[key] = nil
     end
 end
 
@@ -206,16 +219,18 @@ end
 local listener = CreateFrame("Frame")
 listener:RegisterEvent("CHAT_MSG_WHISPER")
 listener:SetScript("OnEvent", function(_, _, _, otherParty)
-    local short = ns.NameOnly(otherParty)
-    if not short then return end
+    if not ns.CanAccess(otherParty) then return end
     local db = loadTracking()
-    if not db.whispered[short] then return end
+    local key = trackedKey(db, otherParty)
+    if not key then return end
+
     -- Once answered, follow-up whispers don't re-queue them.
-    if not db.answered[short] then
-        db.pending[short] = time()
+    if not db.answered[key] then
+        db.pending[key] = time()
     end
+
     -- An active conversation keeps itself alive past the age-out.
-    db.seen[short] = time()
+    db.seen[key] = time()
 end)
 
 SLASH_REPLYRECENT1 = "/rr"

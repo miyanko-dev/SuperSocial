@@ -16,7 +16,7 @@ local ECHO_TIMEOUT = 10     -- Seconds a send may sit unechoed outside a cap pau
 
 local pending = {}      -- Queued, waiting for a token.
 local unconfirmed = {}  -- Sent, no echo yet, in send order.
-local ownedByShort = {} -- short name -> { at = last send, texts = every text sent }, to classify late echoes by exact text.
+local ownedByName = {}  -- name key -> { at = last send, texts = every text sent }, to classify late echoes by exact text.
 local collector         -- 0-delay timer so one command's loop queues fully before the burst.
 local noticeTimer       -- 0-delay timer so mid-pause queuing announces once, not per recipient.
 local capTimer          -- Running while the queue sits out the cap pause.
@@ -42,11 +42,13 @@ local function toPattern(fmt)
     return "^" .. fmt:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1"):gsub("%%%%s", "(.+)") .. "$"
 end
 
--- Server verdict wording. The client's own globals carry the exact (localized) text and are matched first; the literal enUS strings, verified against the 1.15.9 client data, back them up so a missing global can never blind the addon.
+-- Server verdict wording. The client's own globals carry the exact (localized) text and are matched first; the literal enUS strings, verified against the 1.15.9 client data, back them up so a missing global can never blind the addon. ERR_CHAT_WRONG_FACTION is one of those: 1.60 dropped the key, so on that client only the literal is left.
 local THROTTLED_TEXT = ERR_CHAT_THROTTLED or "The number of messages that can be sent is limited, please wait to send another message."
 local WRONG_FACTION_TEXT = ERR_CHAT_WRONG_FACTION or "You can only whisper to members of your alliance."
 local NOT_FOUND_PATTERN = toPattern(ERR_CHAT_PLAYER_NOT_FOUND_S or "No player named '%s' is currently playing.")
 local IGNORING_PATTERN = toPattern(ERR_IGNORING_YOU_S or "%s is ignoring you.")
+-- An ambiguous name is refused outright and never echoes, so without this it would burn the whole try budget before the run gave up on it.
+local AMBIGUOUS_PATTERN = toPattern(ERR_CHAT_PLAYER_AMBIGUOUS_S or "%s: More than one player matches, type more of their server name")
 
 -- Trial accounts draw their own rate-block wording instead of the throttle line; treat it as the same cap. The prefix match covers the store-link markup the full string carries.
 local function isCapVerdict(msg)
@@ -108,8 +110,9 @@ local function writeProgress(text)
     local previous = progressText
     if previous and frame and frame.TransformMessages then
         local rewritten = false
+        -- Chat history keeps secret lines from restricted content long after leaving it, and comparing one would abort the rewrite.
         frame:TransformMessages(
-            function(message) return message:sub(-#previous) == previous end,
+            function(message) return ns.CanAccess(message) and message:sub(-#previous) == previous end,
             function(message, r, g, b, ...)
                 rewritten = true
                 return message:sub(1, #message - #previous) .. text, r, g, b, ...
@@ -150,17 +153,20 @@ local function sendOne(whisper, probeSend)
         sent = sent + 1
     end
     -- Record what we sent them, so even an echo arriving after we gave up is recognised as ours by its text.
-    local short = ns.NameOnly(whisper.target)
-    local owned = ownedByShort[short]
-    if not owned then
-        owned = { texts = {} }
-        ownedByShort[short] = owned
+    local key = ns.NameKey(whisper.target)
+    if key then
+        local owned = ownedByName[key]
+        if not owned then
+            owned = { texts = {} }
+            ownedByName[key] = owned
+        end
+        owned.at = time()
+
+        -- The kind rides along with the text: the chat filter mutes bulk sends and leaves conversation visible, and onEcho only needs the entry to exist.
+        owned.texts[whisper.text] = whisper.kind or "blast"
     end
-    owned.at = time()
-    -- The kind rides along with the text: the chat filter mutes bulk sends and leaves conversation visible, and onEcho only needs the entry to exist.
-    owned.texts[whisper.text] = whisper.kind or "blast"
     whisper.sentAt = GetTime()
-    SendChatMessage(whisper.text, "WHISPER", nil, whisper.target)
+    ns.SendWhisper(whisper.text, whisper.target)
     unconfirmed[#unconfirmed + 1] = whisper
     scheduleEchoSweep()
 end
@@ -210,6 +216,13 @@ local function resetRun()
     cappedThisRun = false
 end
 
+-- Hand every undelivered reply in a list back to /rr. Every abort path runs this, so no way of ending a run can quietly swallow someone who is still waiting on an answer.
+local function reopenReplies(whispers)
+    for _, whisper in ipairs(whispers) do
+        if whisper.kind == "reply" then ns.ReopenReply(whisper.target) end
+    end
+end
+
 -- Failed replies go back on the /rr list, so a swallowed reply is deferred, never lost.
 local function giveUp(whisper)
     if whisper.kind == "reply" then
@@ -250,14 +263,26 @@ local function closeRun()
     resetRun()
     -- Let go of long-idle recipients so a manual whisper much later reads as a personal answer again.
     local cutoff = time() - OWNED_GRACE
-    for short, owned in pairs(ownedByShort) do
-        if owned.at < cutoff then ownedByShort[short] = nil end
+    for key, owned in pairs(ownedByName) do
+        if owned.at < cutoff then ownedByName[key] = nil end
     end
+end
+
+-- A run that walks into restricted content can't see its echoes any more, and recycling unechoed whispers would resend the lot. Stop instead, and say what the run did reach.
+local function stopForRestriction()
+    if #pending == 0 and #unconfirmed == 0 then return end
+    local doneSent, cancelled = ns.CancelQueue()
+    ns.Fail("Run stopped.", "Chat turned restricted mid-run. " .. doneSent .. " sent, " .. cancelled .. " cancelled.")
 end
 
 -- Sweep for sends the server swallowed with no echo, no error and no cap verdict. Outside a pause each gets ECHO_TIMEOUT seconds, then recycles (or gives up past its try budget), so one lost echo can never wedge the run's books.
 local function echoSweep()
     echoWatch = nil
+    -- Backstop for the event below, and the only cover on a client that fires no restriction event at all.
+    if ns.ChatRestricted and ns.ChatRestricted() then
+        stopForRestriction()
+        return
+    end
     -- A pause owns its own recycling, and the probe that ends it re-arms the sweep.
     if capTimer or probing then return end
     local now = GetTime()
@@ -310,12 +335,8 @@ end
 -- The server refused every probe for MAX_CAP_CYCLES straight: stop, hand replies back to /rr and close the run.
 local function abortEpisode()
     local lost = #unconfirmed + #pending
-    for _, whisper in ipairs(unconfirmed) do
-        if whisper.kind == "reply" then ns.ReopenReply(whisper.target) end
-    end
-    for _, whisper in ipairs(pending) do
-        if whisper.kind == "reply" then ns.ReopenReply(whisper.target) end
-    end
+    reopenReplies(unconfirmed)
+    reopenReplies(pending)
     wipe(unconfirmed)
     wipe(pending)
     probing = false
@@ -374,19 +395,18 @@ local function onThrottled()
     capTimer = C_Timer.NewTimer(CAP_PAUSE, probeAfterPause)
 end
 
--- A permanent failure: this target never echoes, so drop them everywhere or they'd be retried until the try budget burns.
+-- A permanent failure: this target never echoes, so drop them everywhere or they'd be retried until the try budget burns. The server names them in its own spelling, so the match goes through ns.SameName.
 local function purgeTarget(name)
-    local short = ns.NameOnly(name)
     local removed = 0
     for i = #unconfirmed, 1, -1 do
-        if ns.NameOnly(unconfirmed[i].target) == short then
+        if ns.SameName(unconfirmed[i].target, name) then
             table.remove(unconfirmed, i)
             removed = removed + 1
             purged = purged + 1
         end
     end
     for i = #pending, 1, -1 do
-        if ns.NameOnly(pending[i].target) == short then
+        if ns.SameName(pending[i].target, name) then
             -- Only counted sends offset the failure math; a never-sent removal was never in `sent`.
             if pending[i].counted then purged = purged + 1 end
             table.remove(pending, i)
@@ -394,7 +414,7 @@ local function purgeTarget(name)
         end
     end
     if removed > 0 then
-        ns.Fail("Skipped " .. short .. ".", "Unreachable.")
+        ns.Fail("Skipped " .. name .. ".", "Unreachable.")
         showProgress()
     end
     if #unconfirmed == 0 and #pending == 0 then
@@ -407,12 +427,17 @@ local function purgeTarget(name)
     end
 end
 
--- Every outgoing whisper echoes here, ours and the player's own. Confirmation demands an exact text and target match: a whisper counts as delivered only against its own echo, so the all-clear can never fire off someone else's proof (like a manual whisper to the same person mid-run).
+-- A recipient's record, found in whatever spelling the echo uses.
+local function ownedRecord(target)
+    local key = ns.FindKeyScan(ownedByName, target)
+    return key and ownedByName[key]
+end
+
+-- Every outgoing whisper echoes here, ours and the player's own. Confirmation demands an exact text and the same player: a whisper counts as delivered only against its own echo, so the all-clear can never fire off someone else's proof (like a manual whisper to the same person mid-run). The echo may spell the name differently from the send ("First Surname" out, "First-Surname" back), so the player is matched through ns.SameName; a mismatch here would resend a delivered whisper every ECHO_TIMEOUT.
 local function onEcho(text, target)
-    local short = ns.NameOnly(target)
     local hit
     for i, whisper in ipairs(unconfirmed) do
-        if whisper.text == text and ns.NameOnly(whisper.target) == short then
+        if whisper.text == text and ns.SameName(whisper.target, target) then
             hit = i
             break
         end
@@ -420,7 +445,7 @@ local function onEcho(text, target)
 
     if not hit then
         -- No exact in-flight match, so this echo proves nothing about the run. Ours by recorded text means a late echo of one we already moved past; anything else is the player whispering by hand.
-        local owned = ownedByShort[short]
+        local owned = ownedRecord(target)
         local ours = owned and owned.texts[text]
         ns.OnWhisperDelivered(target, not ours)
         return
@@ -487,6 +512,9 @@ end
 function ns.CancelQueue()
     local doneSent = sent
     local cancelled = #pending
+    -- A cancelled reply still has someone waiting on it, so it goes back on the /rr list rather than dying with the run. Same courtesy abortEpisode has always given.
+    reopenReplies(pending)
+    reopenReplies(unconfirmed)
     wipe(pending)
     wipe(unconfirmed)
     if collector then collector:Cancel() end
@@ -506,9 +534,15 @@ function ns.CancelQueue()
 end
 
 -- Event wiring stays below the ns definitions, so a wiring failure can never strip the public API.
+
+-- The restriction event lands before the lockdown is enforced, so the run ends while its books are still readable. Without it the echo sweep would only notice ECHO_TIMEOUT later, having meanwhile recycled every whisper whose echo the lockdown swallowed.
+ns.OnChatLockdown(stopForRestriction)
+
 local systemWatch = CreateFrame("Frame")
 systemWatch:RegisterEvent("CHAT_MSG_SYSTEM")
 systemWatch:SetScript("OnEvent", function(_, _, msg)
+    -- A secret verdict can't be matched, and matching it would error.
+    if not ns.CanAccess(msg) then return end
     if isCapVerdict(msg) then
         onThrottled()
         return
@@ -518,18 +552,20 @@ systemWatch:SetScript("OnEvent", function(_, _, msg)
         if whisper then purgeTarget(whisper.target) end
         return
     end
-    local name = msg:match(NOT_FOUND_PATTERN) or msg:match(IGNORING_PATTERN)
+    local name = msg:match(NOT_FOUND_PATTERN) or msg:match(IGNORING_PATTERN) or msg:match(AMBIGUOUS_PATTERN)
     if name then purgeTarget(name) end
 end)
 
 local confirmWatch = CreateFrame("Frame")
 confirmWatch:RegisterEvent("CHAT_MSG_WHISPER_INFORM")
 confirmWatch:SetScript("OnEvent", function(_, _, text, target)
+    -- An unreadable echo proves nothing; the echo sweep decides what happens to the whisper.
+    if not ns.CanAccess(text) or not ns.CanAccess(target) then return end
     onEcho(text, target)
 end)
 
--- Hide the repeating yellow cap error while a run is active; the addon's own status lines cover it. The filter API lives in ChatFrameUtil on 1.15.9, with the old global as fallback for older clients.
-local addFilter = ChatFrameUtil and ChatFrameUtil.AddMessageEventFilter or ChatFrame_AddMessageEventFilter
+-- Hide the repeating yellow cap error while a run is active; the addon's own status lines cover it. Compat.lua picks the filter API.
+local addFilter = ns.AddChatFilter
 if addFilter then
     addFilter("CHAT_MSG_SYSTEM", function(_, _, msg)
         if isCapVerdict(msg) and (capTimer or probing or #unconfirmed > 0) then return true end
@@ -538,7 +574,7 @@ if addFilter then
     -- Mute a run's own "To Name:" echoes, so the replies they draw aren't buried under fifty lines of your own outgoing text. The Y/Z counter stands in for them. Every bulk command is hidden the same way, /rr included; only /wt is left, because a single hand-aimed whisper is its own confirmation and starts no run to count. The queue's delivery ledger is unaffected, because it counts echoes on its own event frame and message filters never reach that.
     addFilter("CHAT_MSG_WHISPER_INFORM", function(_, _, text, target)
         if not ns.QuietBlasts() then return end
-        local owned = ownedByShort[ns.NameOnly(target)]
+        local owned = ownedRecord(target)
         local kind = owned and owned.texts[text]
         if kind == "blast" or kind == "reply" then return true end
     end)
