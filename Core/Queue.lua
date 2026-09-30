@@ -42,19 +42,16 @@ local function toPattern(fmt)
     return "^" .. fmt:gsub("([%(%)%.%%%+%-%*%?%[%]%^%$])", "%%%1"):gsub("%%%%s", "(.+)") .. "$"
 end
 
--- Server verdict wording. The client's own globals carry the exact (localized) text and are matched first; the literal enUS strings, verified against the 1.15.9 client data, back them up so a missing global can never blind the addon. ERR_CHAT_WRONG_FACTION is one of those: 1.60 dropped the key, so on that client only the literal is left.
-local THROTTLED_TEXT = ERR_CHAT_THROTTLED or "The number of messages that can be sent is limited, please wait to send another message."
-local WRONG_FACTION_TEXT = ERR_CHAT_WRONG_FACTION or "You can only whisper to members of your alliance."
-local NOT_FOUND_PATTERN = toPattern(ERR_CHAT_PLAYER_NOT_FOUND_S or "No player named '%s' is currently playing.")
-local IGNORING_PATTERN = toPattern(ERR_IGNORING_YOU_S or "%s is ignoring you.")
+-- Server verdict wording comes from the client's own globals, so it matches the localized text the server sends.
+local NOT_FOUND_PATTERN = toPattern(ERR_CHAT_PLAYER_NOT_FOUND_S)
+local IGNORING_PATTERN = toPattern(ERR_IGNORING_YOU_S)
+
 -- An ambiguous name is refused outright and never echoes, so without this it would burn the whole try budget before the run gave up on it.
-local AMBIGUOUS_PATTERN = toPattern(ERR_CHAT_PLAYER_AMBIGUOUS_S or "%s: More than one player matches, type more of their server name")
+local AMBIGUOUS_PATTERN = toPattern(ERR_CHAT_PLAYER_AMBIGUOUS_S)
 
 -- Trial accounts draw their own rate-block wording instead of the throttle line; treat it as the same cap. The prefix match covers the store-link markup the full string carries.
 local function isCapVerdict(msg)
-    if msg == THROTTLED_TEXT then return true end
-    if ERR_CHAT_RESTRICTED and msg == ERR_CHAT_RESTRICTED then return true end
-    if ERR_CHAT_RESTRICTED_TRIAL and msg == ERR_CHAT_RESTRICTED_TRIAL then return true end
+    if msg == ERR_CHAT_THROTTLED or msg == ERR_CHAT_RESTRICTED or msg == ERR_CHAT_RESTRICTED_TRIAL then return true end
     return msg:find("^Free Trial accounts cannot send unlimited tells") ~= nil
 end
 
@@ -108,7 +105,7 @@ end
 local function writeProgress(text)
     local frame = DEFAULT_CHAT_FRAME
     local previous = progressText
-    if previous and frame and frame.TransformMessages then
+    if previous then
         local rewritten = false
         -- Chat history keeps secret lines from restricted content long after leaving it, and comparing one would abort the rewrite.
         frame:TransformMessages(
@@ -166,7 +163,7 @@ local function sendOne(whisper, probeSend)
         owned.texts[whisper.text] = whisper.kind or "blast"
     end
     whisper.sentAt = GetTime()
-    ns.SendWhisper(whisper.text, whisper.target)
+    C_ChatInfo.SendChatMessage(whisper.text, "WHISPER", nil, whisper.target)
     unconfirmed[#unconfirmed + 1] = whisper
     scheduleEchoSweep()
 end
@@ -278,8 +275,8 @@ end
 -- Sweep for sends the server swallowed with no echo, no error and no cap verdict. Outside a pause each gets ECHO_TIMEOUT seconds, then recycles (or gives up past its try budget), so one lost echo can never wedge the run's books.
 local function echoSweep()
     echoWatch = nil
-    -- Backstop for the event below, and the only cover on a client that fires no restriction event at all.
-    if ns.ChatRestricted and ns.ChatRestricted() then
+    -- Backstop for the restriction event, should the lockdown land after its deferred re-read.
+    if ns.ChatRestricted() then
         stopForRestriction()
         return
     end
@@ -547,11 +544,6 @@ systemWatch:SetScript("OnEvent", function(_, _, msg)
         onThrottled()
         return
     end
-    if msg == WRONG_FACTION_TEXT then
-        local whisper = unconfirmed[1]
-        if whisper then purgeTarget(whisper.target) end
-        return
-    end
     local name = msg:match(NOT_FOUND_PATTERN) or msg:match(IGNORING_PATTERN) or msg:match(AMBIGUOUS_PATTERN)
     if name then purgeTarget(name) end
 end)
@@ -564,18 +556,15 @@ confirmWatch:SetScript("OnEvent", function(_, _, text, target)
     onEcho(text, target)
 end)
 
--- Hide the repeating yellow cap error while a run is active; the addon's own status lines cover it. Compat.lua picks the filter API.
-local addFilter = ns.AddChatFilter
-if addFilter then
-    addFilter("CHAT_MSG_SYSTEM", function(_, _, msg)
-        if isCapVerdict(msg) and (capTimer or probing or #unconfirmed > 0) then return true end
-    end)
+-- Hide the repeating yellow cap error while a run is active; the addon's own status lines cover it.
+ChatFrameUtil.AddMessageEventFilter("CHAT_MSG_SYSTEM", function(_, _, msg)
+    if isCapVerdict(msg) and (capTimer or probing or #unconfirmed > 0) then return true end
+end)
 
-    -- Mute a run's own "To Name:" echoes, so the replies they draw aren't buried under fifty lines of your own outgoing text. The Y/Z counter stands in for them. Every bulk command is hidden the same way, /rr included; only /wt is left, because a single hand-aimed whisper is its own confirmation and starts no run to count. The queue's delivery ledger is unaffected, because it counts echoes on its own event frame and message filters never reach that.
-    addFilter("CHAT_MSG_WHISPER_INFORM", function(_, _, text, target)
-        if not ns.QuietBlasts() then return end
-        local owned = ownedRecord(target)
-        local kind = owned and owned.texts[text]
-        if kind == "blast" or kind == "reply" then return true end
-    end)
-end
+-- Mute a run's own "To Name:" echoes, so the replies they draw aren't buried under fifty lines of your own outgoing text. The Y/Z counter stands in for them. Every bulk command is hidden the same way, /rr included; only /wt is left, because a single hand-aimed whisper is its own confirmation and starts no run to count. The queue's delivery ledger is unaffected, because it counts echoes on its own event frame and message filters never reach that.
+ChatFrameUtil.AddMessageEventFilter("CHAT_MSG_WHISPER_INFORM", function(_, _, text, target)
+    if not ns.QuietBlasts() then return end
+    local owned = ownedRecord(target)
+    local kind = owned and owned.texts[text]
+    if kind == "blast" or kind == "reply" then return true end
+end)

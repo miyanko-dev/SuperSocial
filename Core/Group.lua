@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- Who counts as a groupmate for the /ww and /rr skip checks: the current party or raid, plus anyone who left it recently. Both sets are keyed by name key, so a Forever groupmate is told apart from a namesake with another surname.
+-- Who counts as a groupmate for the /ww and /rr skip checks: the current party or raid, plus anyone who left it recently. Both sets are keyed by name key, so a groupmate is told apart from a namesake with another surname.
 
 local function buildGroupSet()
     local set = {}

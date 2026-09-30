@@ -101,7 +101,6 @@ ns.Fail = fail
 ns.Note = note
 ns.QuoteMessage = quoteMessage
 ns.Plural = plural
-ns.SkipReasons = skipReasons
 ns.SkipLine = skipLine
 ns.FormatDuration = formatDuration
 ns.FormatRemaining = formatRemaining

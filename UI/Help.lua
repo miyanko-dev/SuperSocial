@@ -14,19 +14,6 @@ local LABEL_WIDTH = 116
 local COLUMN_GAP = 12
 local ROW_GAP = 10
 
--- /ws only exists where the Era auction house still names sellers (Core/Compat.lua), so the reference names it only there.
-local function available(command)
-    return command ~= "/ws" or ns.AuctionSellers ~= nil
-end
-
-local function commandList(commands)
-    local shown = {}
-    for _, command in ipairs(commands) do
-        if available(command) then shown[#shown + 1] = command end
-    end
-    return table.concat(shown, ", ")
-end
-
 -- The panel is three sections: the slash commands, the /ss management subcommands, then the flags that refine /ww. "cmd" is the yellow left-column label; "eg" carries the full worked example so the column stays scannable.
 local INTRO =
     "Run /who, then /ww whispers everyone in the results — that's the core idea. "
@@ -42,11 +29,6 @@ local COMMANDS = {
         cmd = "/wt",
         desc = "Whisper your current target (a player you have selected).",
         eg = "/wt got room for one more?",
-    },
-    {
-        cmd = "/ws",
-        desc = "Whisper every seller on the auction house Browse page.",
-        eg = "/ws still selling your Black Lotus?",
     },
     {
         cmd = "/rr",
@@ -116,7 +98,7 @@ local MANAGE = {
 local FLAGS = {
     {
         cmd = "-limit N",
-        on = { "/ww", "/rr", "/ws" },
+        on = { "/ww", "/rr" },
         desc = "Whisper only the first N recipients.",
         eg = "/ww -limit 10 LFM SM live",
     },
@@ -134,13 +116,13 @@ local FLAGS = {
     },
     {
         cmd = "-cd D",
-        on = { "/ww", "/wt", "/ws" },
+        on = { "/ww", "/wt" },
         desc = "Skip anyone still on cooldown, then put new recipients on cooldown for D: minutes by default, or 30m, 2h, 30d. Account-wide, survives reloads; 30d is the long memory for a pitch nobody should hear twice.",
         eg = "/ww -cd 30d WTS enchant mats, whisper me",
     },
     {
         cmd = "-cd",
-        on = { "/ww", "/ws" },
+        on = { "/ww" },
         desc = "With no duration, skip anyone already cooling down without recording the people you whisper.",
         eg = "/ww -cd LFM SM live, need 1 tank",
     },
@@ -152,7 +134,7 @@ local FLAGS = {
     },
     {
         cmd = ";",
-        on = { "/ww", "/wt", "/ws", "/rr" },
+        on = { "/ww", "/wt", "/rr" },
         desc = "Split the message: each recipient gets every part as its own whisper, back to back.",
         eg = "/ww Hey, how are you? ; up for tanking Scholo?",
     },
@@ -203,9 +185,7 @@ local function layoutSection(content, width, labelText, entries, describe)
     local section = buildSection(content, labelText)
     local y = SECTION_INNER_PAD
     for _, entry in ipairs(entries) do
-        if available(entry.cmd) then
-            y = y + buildRow(section, y, width, entry.cmd, describe(entry)) + ROW_GAP
-        end
+        y = y + buildRow(section, y, width, entry.cmd, describe(entry)) + ROW_GAP
     end
     section:SetHeight(y - ROW_GAP + SECTION_INNER_PAD)
     return section
@@ -258,7 +238,7 @@ local function buildFrame()
     local sections = {
         { label = "Commands", entries = COMMANDS, describe = withExample },
         { label = "Manage", entries = MANAGE, describe = withExample },
-        { label = "Flags", entries = FLAGS, describe = function(e) return e.desc .. "  (" .. commandList(e.on) .. ")\n" .. exampleLine(e.eg) end },
+        { label = "Flags", entries = FLAGS, describe = function(e) return e.desc .. "  (" .. table.concat(e.on, ", ") .. ")\n" .. exampleLine(e.eg) end },
     }
     for _, spec in ipairs(sections) do
         local section = layoutSection(content, width, spec.label, spec.entries, spec.describe)

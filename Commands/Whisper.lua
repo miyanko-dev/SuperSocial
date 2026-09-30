@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- The outgoing commands: /ww blasts the current or a fresh /who list, /wt whispers the selected player, and on Era /ws whispers the auction house Browse page's sellers. All hand every whisper to the queue.
+-- The outgoing commands: /ww blasts the current or a fresh /who list, /wt whispers the selected player. Both hand every whisper to the queue.
 
 local ok = ns.Ok
 local fail = ns.Fail
@@ -36,7 +36,7 @@ local function whisperTarget(input)
         return
     end
 
-    -- Compat builds the name the way Blizzard's own whisper menu does: a cross-realm Era target keeps its realm, or a same-realm namesake gets it; a Forever target keeps its surname, or every namesake with another surname could.
+    -- Built the way Blizzard's own whisper menu builds it: the target keeps its surname, or every namesake with another surname could hear it.
     local targetName, hidden = ns.UnitFullName("target")
     if hidden then
         fail("Target name hidden.", "This map keeps player names from addons.")
@@ -47,7 +47,7 @@ local function whisperTarget(input)
         return
     end
     if ns.IsBlocked(ns.LoadBlocked(), targetName) then
-        -- The slash command takes one token, so a Forever "First Surname" is offered in its hyphen spelling.
+        -- The slash command takes one token, so a "First Surname" is offered in its hyphen spelling.
         local typed = targetName:gsub("%s+", "-")
         fail("Blocked.", targetName .. " is on the block list (/ss -unblock " .. typed .. ").")
         return
@@ -76,10 +76,10 @@ local function loadLists(opts)
 end
 
 -- Cap to -limit, report one status line, queue the sends, stamp the persistent lists and hand the names to /rr.
-local function sendBlast(opts, lists, eligible, counts, total, singular, multiple)
+local function sendBlast(opts, lists, eligible, counts, total)
     local sendCount = opts.limit and math.min(opts.limit, #eligible) or #eligible
     counts.limit = #eligible - sendCount
-    local pool = total .. " " .. plural(total, singular, multiple)
+    local pool = total .. " " .. plural(total, "/who result", "/who results")
 
     if sendCount == 0 then
         fail("Nobody to whisper.", "None of " .. pool .. " qualify.")
@@ -119,7 +119,7 @@ local function dispatchWho(opts)
     local groupSet = ns.BuildGroupSet()
     local lists = loadLists(opts)
 
-    -- Keys are the ones ns.SkipReasons reads, counted in the order the checks run.
+    -- Keys are the ones ns.SkipLine reads, counted in the order the checks run.
     local counts = { blocked = 0, cooldown = 0, filter = 0, group = 0, recentGroup = 0 }
     local eligible = {}
     for i = 1, count do
@@ -142,30 +142,29 @@ local function dispatchWho(opts)
         end
     end
 
-    sendBlast(opts, lists, eligible, counts, count, "/who result", "/who results")
+    sendBlast(opts, lists, eligible, counts, count)
 end
 
 local WHO_TIMEOUT = 6      -- Seconds to wait for the server's answer before aborting, since the who list still holds the previous search.
 local PANEL_RESTORE = 8    -- The server answers some queries seconds late; re-arming the panel too early lets a straggler pop it open.
 
--- Frames whose WHO_LIST_UPDATE the addon took away, so restore wakes exactly those and never a frame that was not listening.
-local deafened = {}
+-- The Group Finder's Who tab is the only WHO_LIST_UPDATE listener, and an update can pop its window open (WhoList.lua UpdateWhoList). It is load-on-demand, so it is looked up per run. Restore wakes it only when the addon took its event away, never when it was not listening.
+local deafened
 
 local function deafenWhoUi()
-    for _, frame in ipairs(ns.WhoListFrames()) do
-        if frame:IsEventRegistered("WHO_LIST_UPDATE") then
-            frame:UnregisterEvent("WHO_LIST_UPDATE")
-            deafened[frame] = true
-        end
+    local panel = LFGWhoListFrame
+    if panel and panel:IsEventRegistered("WHO_LIST_UPDATE") then
+        panel:UnregisterEvent("WHO_LIST_UPDATE")
+        deafened = panel
     end
     C_FriendList.SetWhoToUi(true)
 end
 
 -- Put the who plumbing back where the panel expects it: results to chat unless the panel is open, and the panel listening again.
 local function restoreWhoUi()
-    C_FriendList.SetWhoToUi(ns.WhoPanelShown())
-    for frame in pairs(deafened) do frame:RegisterEvent("WHO_LIST_UPDATE") end
-    wipe(deafened)
+    C_FriendList.SetWhoToUi(LFGWhoListFrame ~= nil and LFGWhoListFrame:IsShown())
+    if deafened then deafened:RegisterEvent("WHO_LIST_UPDATE") end
+    deafened = nil
 end
 
 -- One waiter for every -who run, because frames are never collected and a fresh one per run would leak. The run counter lets a stale timeout recognise that a newer run owns the frame.
@@ -227,72 +226,8 @@ local function whisperWho(input)
     end
 end
 
--- Every seller on the Browse page once, in listing order, minus yourself.
-local function uniqueSellers()
-    local me = ns.UnitFullName("player")
-    local seen, names = {}, {}
-    for _, name in ipairs(ns.AuctionSellers()) do
-        local key = ns.NameKey(name)
-        if key and not seen[key] and not ns.SameName(name, me) then
-            seen[key] = true
-            names[#names + 1] = name
-        end
-    end
-    return names
-end
-
-local function whisperSellers(input)
-    local opts = ns.ParseFlags(trim(input))
-    if ns.FlagMistake(opts, true) then return end
-    if ns.UsedWho(opts) then
-        fail("-who doesn't apply to /ws.", "It reads the Browse tab.")
-        return
-    end
-
-    -- Sellers carry no class or zone, so the term filters can't apply here.
-    if #opts.terms > 0 or #opts.includeTerms > 0 then
-        fail("-skip and -only don't apply to /ws.", "Sellers carry no class or zone.")
-        return
-    end
-    if not opts.text or opts.text == "" then
-        note("Usage: /ws MESSAGE whispers every seller in the Browse tab, e.g. /ws still selling your Black Lotus?")
-        return
-    end
-    if refuseRestricted() then return end
-    if not ns.AuctionHouseShown() then
-        fail("Auction house closed.", "Open the Browse tab first.")
-        return
-    end
-    local names = uniqueSellers()
-    if #names == 0 then
-        fail("No sellers", "in the Browse results.")
-        return
-    end
-
-    local lists = loadLists(opts)
-    local counts = { blocked = 0, cooldown = 0 }
-    local eligible = {}
-    for _, sellerName in ipairs(names) do
-        if ns.IsBlocked(lists.blocked, sellerName) then
-            counts.blocked = counts.blocked + 1
-        elseif lists.cooldown and ns.OnCooldown(lists.cooldown, sellerName) then
-            counts.cooldown = counts.cooldown + 1
-        else
-            eligible[#eligible + 1] = sellerName
-        end
-    end
-
-    sendBlast(opts, lists, eligible, counts, #names, "seller", "sellers")
-end
-
 SLASH_WHISPERTARGET1 = "/wt"
 SlashCmdList["WHISPERTARGET"] = whisperTarget
 
 SLASH_WHISPERWHO1 = "/ww"
 SlashCmdList["WHISPERWHO"] = whisperWho
-
--- Only where the auction house still names its sellers; on Forever /ws stays free for other addons.
-if ns.AuctionSellers then
-    SLASH_WHISPERSELLERS1 = "/ws"
-    SlashCmdList["WHISPERSELLERS"] = whisperSellers
-end

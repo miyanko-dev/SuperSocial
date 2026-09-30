@@ -62,7 +62,7 @@ local function unblockName(name)
     ok("Unblocked", shown .. ".")
 end
 
-local MANUAL_COOLDOWN = 30 * 86400 -- /ss -cd NAME without a duration: the long memory the old ignore list gave.
+local MANUAL_COOLDOWN = 30 * 86400 -- /ss -cd NAME without a duration: the long memory for a pitch nobody should hear twice.
 
 -- Put one player on cooldown by hand, the same list -cd sends build.
 local function cooldownName(arg)
@@ -145,9 +145,6 @@ local function adminCommand(input)
         ok("Cooldown list cleared.")
     elseif input:match("^%-cd%s") then
         cooldownName(trim(raw:match("^%S+%s+(.*)$")))
-    elseif input:match("^%-ignore") then
-        -- The old command still gets a pointer, so muscle memory lands somewhere useful.
-        note("-ignore is now -cd 30d. /ss -cd manages the list.")
     elseif input == "quiet" then
         quietCommand("")
     elseif input:match("^quiet%s") then

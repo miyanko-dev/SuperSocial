@@ -10,7 +10,6 @@ local plural = ns.Plural
 
 -- Tracking lives in the saved variables, so a /reload mid-session can't drop the people still waiting on an answer. Entries age out after TRACK_MINUTES, because a reply is an LFM conversation: past that window it's stale and answering it would read as spam, not as a reply.
 local TRACK_MINUTES = 15
-local TRACKING_FORMAT = 2 -- Bumped when the tracking keys change shape. Older records are dropped, not converted: they age out within TRACK_MINUTES anyway.
 
 local tracking
 
@@ -36,10 +35,6 @@ local function loadTracking()
     SuperSocialDB = SuperSocialDB or {}
     local db = SuperSocialDB.replies or {}
     SuperSocialDB.replies = db
-    if db.keyFormat ~= TRACKING_FORMAT then
-        db.whispered, db.pending, db.answered, db.seen = {}, {}, {}, {}
-        db.keyFormat = TRACKING_FORMAT
-    end
     db.whispered = db.whispered or {}  -- name key -> the name exactly as we whispered it
     db.pending = db.pending or {}      -- name key -> time of their still-unanswered reply
     db.answered = db.answered or {}    -- name key -> true once answered; a fresh /ww clears it
