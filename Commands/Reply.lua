@@ -157,16 +157,16 @@ local function replyRecent(input)
     local groupSet = ns.BuildGroupSet()
     local blocked = ns.LoadBlocked()
 
-    local skippedGroup, skippedRecentGroup, skippedBlocked = 0, 0, 0
+    -- Counts behind the "N skipped" total, keyed the way ns.SkipLine reads them.
+    local skipCounts = { blocked = 0, group = 0, recentGroup = 0 }
     local eligible = {}
     for key in pairs(db.pending) do
         local fullName = db.whispered[key]
-        if ns.InGroup(groupSet, fullName) then
-            skippedGroup = skippedGroup + 1
-        elseif ns.WasRecentlyGrouped(fullName) then
-            skippedRecentGroup = skippedRecentGroup + 1
+        local groupReason = ns.GroupSkip(groupSet, fullName)
+        if groupReason then
+            skipCounts[groupReason] = skipCounts[groupReason] + 1
         elseif ns.IsBlocked(blocked, fullName) then
-            skippedBlocked = skippedBlocked + 1
+            skipCounts.blocked = skipCounts.blocked + 1
         else
             eligible[#eligible + 1] = key
         end
@@ -178,14 +178,7 @@ local function replyRecent(input)
     end)
 
     local sendCount = opts.limit and math.min(opts.limit, #eligible) or #eligible
-
-    -- Counts behind the "N skipped" total, in the order the breakdown reads.
-    local skipCounts = {
-        blocked = skippedBlocked,
-        group = skippedGroup,
-        recentGroup = skippedRecentGroup,
-        limit = #eligible - sendCount,
-    }
+    skipCounts.limit = #eligible - sendCount
 
     local pool = pending .. " unanswered " .. plural(pending, "reply", "replies")
 

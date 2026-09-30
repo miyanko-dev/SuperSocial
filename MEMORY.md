@@ -1,6 +1,6 @@
 # SuperSocial — Memory
 
-Updated 2026-09-30 after the Forever-only rework (5.0.0) and the owner's second round of decisions: `/ws` rebuilt on the Forever auction house, chat colours from Blizzard colour objects. The version stays 5.0.0 (not shipped yet). The owner's decision is WoW Forever 1.60.x only: `main` holds the Forever version and `1.15.x-backup` keeps the dual-client 4.1.0. Verified against Gethe `forever` @ `966519cf` (1.60.1.70124) and Ketho `forever` @ `4149af64` (1.60.1.70009). The installed client is 1.60.1.70009. Nothing has run in a client. `Tools/harness.lua` passes 105/105 in `strict` and in `lenient`, which proves logic, not client behaviour.
+Updated 2026-09-30 after the Forever-only rework (5.0.0) and the owner's second round of decisions: `/ws` rebuilt on the Forever auction house, chat colours from Blizzard colour objects. The version stays 5.0.0 (not shipped yet). The owner's decision is WoW Forever 1.60.x only: `main` holds the Forever version and `1.15.x-backup` keeps the dual-client 4.1.0. Verified against Gethe `forever` @ `966519cf` (1.60.1.70124) and Ketho `forever` @ `4149af64` (1.60.1.70009). The installed client is 1.60.1.70009. Nothing has run in a client. `Tools/harness.lua` passes 109/109 in `strict` and in `lenient`, which proves logic, not client behaviour.
 
 ## Current state
 
@@ -17,9 +17,9 @@ Every whisper is confirmed by its server echo, and the send rate calibrates itse
 | Item | State |
 |---|---|
 | Version | 5.0.0, `## Interface: 16001`, `## Category: Social`, `## Author: miyanko`, icon `134149` |
-| Git | `main`: `a6130d6` (split), `6878f57` (fixes), `1718da4` (panel), `c62edb3` (MEMORY), then round 2: `b5b03d6` (colour objects), `eb6e6f1` (`/ws`), then this MEMORY commit. Not pushed. `1.15.x-backup` = `e715c8a` (dual-client 4.1.0), local and on GitHub, untouched. The Questie integration stays removed: `QuestMacro.lua` exists only in `20c515f`/`2b16d40`. The last Era-only release is 4.0.0 at `2b16d40` |
+| Git | `main`: `a6130d6` (split), `6878f57` (fixes), `1718da4` (panel), `c62edb3` (MEMORY), then round 2: `b5b03d6` (colour objects), `eb6e6f1` (`/ws`), `fe13040` (MEMORY), then the `/ws` group-skip commit (code and this MEMORY). Not pushed. `1.15.x-backup` = `e715c8a` (dual-client 4.1.0), local and on GitHub, untouched. The Questie integration stays removed: `QuestMacro.lua` exists only in `20c515f`/`2b16d40`. The last Era-only release is 4.0.0 at `2b16d40` |
 | Files | `Core/` logic (`Lockdown`, `Names`, `Format`, `Lists`, `Group`, `Auction`, `Flags`, `Queue`), `Commands/` slash commands (`Whisper`, `Reply`, `Admin`), `UI/Help.lua` panel, `Tools/` harness |
-| Lua lines | shipped 2,248 → 2,044 (split) → 2,217 (`/ws`, colours), harness 677 → 674 → 896 |
+| Lua lines | shipped 2,248 → 2,044 (split) → 2,217 (`/ws`, colours) → 2,221 (group skip), harness 677 → 674 → 896 → 928 |
 
 Names and client facts:
 
@@ -35,7 +35,7 @@ Names and client facts:
 - Who list: `LFGWhoListFrame` (load-on-demand `Blizzard_GroupFinder_VanillaStyle`) is the only `WHO_LIST_UPDATE` listener. Its OnShow/OnHide call `SetWhoToUi` (`WhoList.lua:247-253`), and it keeps `IsShown()` when `LFGParentFrame` closes, so restore reads `IsVisible()`. `GetNumWhoResults`/`GetWhoInfo` are `RequiresFriendList` (`FailureMode = "ReturnNothing"`).
 - All `ERR_CHAT_*` verdict strings used exist with the same enUS text. `ERR_CHAT_WRONG_FACTION` doesn't exist, so the wrong-faction branch is gone; what the server says for a wrong-faction whisper is unknown.
 - `ADDON_RESTRICTION_STATE_CHANGED`: `SynchronousEvent`, payload `(type, state)`. `Activating` means enforced once the dispatch completes (`RestrictedActionsConstantsDocumentation.lua`). Which `AddOnRestrictionType` values hide chat is not documented, so the payload is not read (SS-10).
-- `/ws` (rebuilt 2026-09-30, owner decision "I liked it"). Same shape as the Era command on the backup: `-limit`, `-cd`, `;`, one whisper per seller (deduped by name key), never yourself, `-skip`/`-only`/`-who` refused, block and cooldown lists applied, no group skip (Era parity, see owner question 1), echo-confirmed through the queue, recipients handed to `/rr`. `Core/Auction.lua` reads the sellers:
+- `/ws` (rebuilt 2026-09-30, owner decision "I liked it"). Same shape as the Era command on the backup: `-limit`, `-cd`, `;`, one whisper per seller (deduped by name key), never yourself, `-skip`/`-only`/`-who` refused, block and cooldown lists applied, the same group skip as `/ww` and `/rr` (party or raid, plus anyone who left the group in the last 15 minutes, owner decision 2026-09-30), echo-confirmed through the queue, recipients handed to `/rr`. `Core/Auction.lua` reads the sellers:
   - Forever's Browse rows carry no seller. Only an item's or a commodity's search results name them: `ItemSearchResultInfo.owners` and `CommoditySearchResultInfo.owners` (`AuctionHouseDocumentation.lua:1604-1673`). The Buy, Sell and Auctions tabs all read those same results (`Blizzard_AuctionHouseItemBuyFrame.lua`, `ItemSellFrame.lua`, `CommoditiesList.lua`, `AuctionsFrame.lua`).
   - A visit runs from `AUCTION_HOUSE_SHOW` to `AUCTION_HOUSE_CLOSED` (both routed by the loaded Mainline `EventRouting.lua:12-14`). Both forget the listing.
   - The listing is the last `ITEM_SEARCH_RESULTS_UPDATED` (payload `itemKey`, `newAuctionID?`) or `COMMODITY_SEARCH_RESULTS_UPDATED` (payload `itemID`) of the visit, read with `GetNumItemSearchResults`/`GetItemSearchResultInfo` or the commodity pair. It is tracked by event, not read off Blizzard's window, because Auctionator's tabs clear `AuctionHouseFrame.displayMode` to nil (`Auctionator/Libs_ModernAH/LibAHTab/LibAHTab.lua:89-90`) and show the same results.
@@ -72,10 +72,9 @@ Nothing to do (still valid): the send API; secret guards on `CHAT_MSG_WHISPER_IN
 
 ## Owner questions
 
-Settled 2026-09-30: `/ws` rebuilt on the Forever AH (`eb6e6f1`). Chat colours use Blizzard colour objects with the shared yellow prefix (`b5b03d6`).
+Settled 2026-09-30: `/ws` rebuilt on the Forever AH (`eb6e6f1`). Chat colours use Blizzard colour objects with the shared yellow prefix (`b5b03d6`). `/ws` skips groupmates like `/ww` and `/rr` (owner: yes). All three commands run the one `ns.GroupSkip` in `Core/Group.lua`, which replaced the inline `InGroup`/`WasRecentlyGrouped` pairs in `/ww` and `/rr`.
 
-1. `/ws` group skip. Today `/ws` skips only you, blocked and cooling names, the same as Era. It does not skip your party or raid, or anyone grouped with you in the last 15 minutes, as `/ww` and `/rr` do. Yes means the `ns.InGroup`/`ns.WasRecentlyGrouped` checks and their counts in `whisperSellers`, about 6 lines. No means nothing, and the README already says the group skip covers `/ww` and `/rr`.
-2. Addon Compartment entry. Today: none. Yes means `## AddonCompartmentFunc` plus a global that calls `ns.TogglePanel`, about 5 lines. No means nothing.
+1. Addon Compartment entry. Today: none. Yes means `## AddonCompartmentFunc` plus a global that calls `ns.TogglePanel`, about 5 lines. No means nothing.
 
 ## Unverified assumptions
 
@@ -121,3 +120,4 @@ You need an alt and a second player. Run `/console scriptErrors 1` first.
 - [ ] Back to the Browse list, then `/ws hi`: "No item listings open.". Close the AH, then `/ws hi`: "Auction house closed.".
 - [ ] In Auctionator's Shopping or Selling tab with an item's listings shown, `/ws hi` reads that listing.
 - [ ] A seller answers a `/ws`: `/rr` lists them.
+- [ ] Group with a player who has an auction up, open that item's listings, then `/ws hi`: "1 in your group". Leave the group and retry: "1 recently grouped".

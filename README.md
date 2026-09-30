@@ -13,7 +13,7 @@ Run a `/who` search, then `/ww MESSAGE` whispers everyone in the results. That's
 - **Quiet runs** — one status line that rewrites itself in place instead of fifty `To Playername:` lines
 - **Confirmed sends** — counts the server's own echo, so "sent" means the server took it
 - **Split messages** — a `;` in the message sends it as two back-to-back whispers
-- Never whispers you. `/ww` and `/rr` also skip your party or raid and anyone grouped with you in the last 15 minutes
+- Never whispers you. `/ww`, `/ws` and `/rr` also skip your party or raid and anyone grouped with you in the last 15 minutes
 
 ## Installation
 
@@ -81,7 +81,7 @@ WoW Forever 1.60.x (`## Interface: 16001`). No libraries, no dependencies.
 - `/who` itself is throttled to about one search every few seconds. A `-who` run that gets throttled aborts with a notice rather than whispering the previous search's list.
 - `/who` results are capped by the server. A capped answer reports the total so you can narrow the filter.
 - Offline players, players ignoring you and ambiguous names are dropped from the run rather than retried.
-- The auction house names sellers only in an item's own listings, on the Buy, Sell or Auctions tab, never on the Browse list. Open an item first, then `/ws`. It reads the rows loaded so far, skips your own auctions, and can't reach sellers a row leaves unnamed ("Sellers: A, B, and 3 more"). Whether the server fills in seller names on WoW Forever is still to be confirmed in game.
+- The auction house names sellers only in an item's own listings, on the Buy, Sell or Auctions tab, never on the Browse list. Open an item first, then `/ws`. It reads the rows loaded so far, skips your own auctions and your groupmates like `/ww` does, and can't reach sellers a row leaves unnamed ("Sellers: A, B, and 3 more"). Whether the server fills in seller names on WoW Forever is still to be confirmed in game.
 - Whisper echoes and sender names are hidden from addons inside encounters, PvP matches and restricted maps such as dungeons and raids. `/ww`, `/wt`, `/ws` and `/rr` refuse to start there with `Chat restricted here.`, and a run that walks into such content stops before anything is resent.
 - A character has a first name and a surname. `/wt` whispers `First Surname`, and every name comparison treats `First Surname`, `First-Surname` and `First` as one player. A bare first name on the block or cooldown list covers every player with that first name; add the surname with a hyphen (`/ss -block Thrall-Stormborn`) to name one player.
 - The modifier-click shortcuts (whisper, invite, add friend) live in the separate **SocialShortcuts** addon.

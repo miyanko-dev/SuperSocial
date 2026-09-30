@@ -127,10 +127,9 @@ local function dispatchWho(opts)
         local whoInfo = C_FriendList.GetWhoInfo(i)
         local fullName = whoInfo and whoInfo.fullName
         if fullName then
-            if ns.InGroup(groupSet, fullName) then
-                counts.group = counts.group + 1
-            elseif ns.WasRecentlyGrouped(fullName) then
-                counts.recentGroup = counts.recentGroup + 1
+            local groupReason = ns.GroupSkip(groupSet, fullName)
+            if groupReason then
+                counts[groupReason] = counts[groupReason] + 1
             elseif ns.IsBlocked(lists.blocked, fullName) then
                 counts.blocked = counts.blocked + 1
             elseif ns.IsFiltered(whoInfo, opts.terms) or not ns.IsIncluded(whoInfo, opts.includeTerms) then
@@ -280,11 +279,17 @@ local function whisperSellers(input)
         return
     end
 
+    local groupSet = ns.BuildGroupSet()
     local lists = loadLists(opts)
-    local counts = { blocked = 0, cooldown = 0 }
+
+    -- Keys are the ones ns.SkipLine reads, counted in the order the checks run, the same order as /ww.
+    local counts = { blocked = 0, cooldown = 0, group = 0, recentGroup = 0 }
     local eligible = {}
     for _, sellerName in ipairs(names) do
-        if ns.IsBlocked(lists.blocked, sellerName) then
+        local groupReason = ns.GroupSkip(groupSet, sellerName)
+        if groupReason then
+            counts[groupReason] = counts[groupReason] + 1
+        elseif ns.IsBlocked(lists.blocked, sellerName) then
             counts.blocked = counts.blocked + 1
         elseif lists.cooldown and ns.OnCooldown(lists.cooldown, sellerName) then
             counts.cooldown = counts.cooldown + 1

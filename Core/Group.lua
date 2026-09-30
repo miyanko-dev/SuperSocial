@@ -58,6 +58,12 @@ local function wasRecentlyGrouped(name)
     return true
 end
 
+-- The one group check every bulk command runs, so /ww, /ws and /rr leave out the same people. Returns the ns.SkipLine count key that applies, "group" or "recentGroup", or nil.
+local function groupSkip(set, name)
+    if inGroup(set, name) then return "group" end
+    if wasRecentlyGrouped(name) then return "recentGroup" end
+    return nil
+end
+
 ns.BuildGroupSet = buildGroupSet
-ns.InGroup = inGroup
-ns.WasRecentlyGrouped = wasRecentlyGrouped
+ns.GroupSkip = groupSkip

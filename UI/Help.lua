@@ -32,7 +32,7 @@ local COMMANDS = {
     },
     {
         cmd = "/ws",
-        desc = "Whisper every seller in the item listings open in the auction house. The Browse list names no sellers, so open an item first. Your own auctions are skipped.",
+        desc = "Whisper every seller in the item listings open in the auction house. The Browse list names no sellers, so open an item first. Skips your own auctions, your party or raid, and anyone grouped with you in the last 15 minutes.",
         eg = "/ws still selling your Black Lotus?",
     },
     {

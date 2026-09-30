@@ -785,6 +785,38 @@ SlashCmdList["REPLYRECENT"]("")
 expect("seller reply tracked", seen("1 unanswered"))
 SlashCmdList["REPLYRECENT"]("reset")
 
+print("\n-- /ws skips your group and anyone who just left it --")
+showItem(2589)
+groupRoster = { { "Sella", "Vend" } }
+fire("GROUP_ROSTER_UPDATE")
+whisperSellers("hi")
+expect("groupmate seller skipped", seen("1 in your group") and #whisperLog == 1 and targetOf(1) == "Other Farrealm",
+    "got " .. #whisperLog .. " to " .. targetOf(1))
+groupRoster = {}
+fire("GROUP_ROSTER_UPDATE")
+whisperSellers("hi")
+expect("recent groupmate seller skipped", seen("1 recently grouped") and #whisperLog == 1 and targetOf(1) == "Other Farrealm",
+    "got " .. #whisperLog .. " to " .. targetOf(1))
+
+print("\n-- /rr skips a groupmate through the same check --")
+SlashCmdList["REPLYRECENT"]("reset")
+whisperSellers("still selling?")
+fire("CHAT_MSG_WHISPER", "yes", "Other Farrealm")
+groupRoster = { { "Other", "Farrealm" } }
+resetRun()
+SlashCmdList["REPLYRECENT"]("thanks")
+runTimers(now + 30)
+expect("/rr groupmate skipped", seen("1 in your group") and #whisperLog == 0, "sent " .. #whisperLog)
+groupRoster = {}
+SlashCmdList["REPLYRECENT"]("reset")
+
+print("\n-- the recent-group window runs out after 15 minutes --")
+-- The stub clock only moves when a timer fires.
+schedule(15 * 60 + 1, function() end)
+runTimers(now + 15 * 60 + 1)
+whisperSellers("hi")
+expect("former groupmate whispered again", #whisperLog == 2 and not seen("recently grouped"), "got " .. #whisperLog)
+
 print("\n-- closing the auction house forgets the listing --")
 closeAuctionHouse()
 whisperSellers("hi")
