@@ -31,6 +31,11 @@ local COMMANDS = {
         eg = "/wt got room for one more?",
     },
     {
+        cmd = "/ws",
+        desc = "Whisper every seller in the item listings open in the auction house. The Browse list names no sellers, so open an item first. Your own auctions are skipped.",
+        eg = "/ws still selling your Black Lotus?",
+    },
+    {
         cmd = "/rr",
         desc = "Reply to everyone whispered via /ww who whispered back and hasn't been answered yet. On its own it reports how many are waiting.",
         eg = "/rr invite incoming, whisper me",
@@ -98,7 +103,7 @@ local MANAGE = {
 local FLAGS = {
     {
         cmd = "-limit N",
-        on = { "/ww", "/rr" },
+        on = { "/ww", "/rr", "/ws" },
         desc = "Whisper only the first N recipients.",
         eg = "/ww -limit 10 LFM SM live",
     },
@@ -116,13 +121,13 @@ local FLAGS = {
     },
     {
         cmd = "-cd D",
-        on = { "/ww", "/wt" },
+        on = { "/ww", "/wt", "/ws" },
         desc = "Skip anyone still on cooldown, then put new recipients on cooldown for D: minutes by default, or 30m, 2h, 30d. Account-wide, survives reloads; 30d is the long memory for a pitch nobody should hear twice.",
         eg = "/ww -cd 30d WTS enchant mats, whisper me",
     },
     {
         cmd = "-cd",
-        on = { "/ww" },
+        on = { "/ww", "/ws" },
         desc = "With no duration, skip anyone already cooling down without recording the people you whisper.",
         eg = "/ww -cd LFM SM live, need 1 tank",
     },
@@ -134,7 +139,7 @@ local FLAGS = {
     },
     {
         cmd = ";",
-        on = { "/ww", "/wt", "/rr" },
+        on = { "/ww", "/wt", "/ws", "/rr" },
         desc = "Split the message: each recipient gets every part as its own whisper, back to back.",
         eg = "/ww Hey, how are you? ; up for tanking Scholo?",
     },

@@ -14,6 +14,13 @@ The `/ss` panel is built against stub `ButtonFrameTemplate`, `InsetFrameTemplate
 `ScrollFrameTemplate` children, which checks the title, portrait, strata, hidden button bar, Escape
 registration and the scroll gutter, not how the panel looks.
 
+`/ws` runs against a stub `C_AuctionHouse` with item and commodity search results, the
+`AUCTION_HOUSE_SHOW`/`AUCTION_HOUSE_CLOSED` and `ITEM_SEARCH_RESULTS_UPDATED`/`COMMODITY_SEARCH_RESULTS_UPDATED`
+events, and a load-on-demand `AuctionHouseFrame` whose display mode is Browse, an item, a commodity,
+the Sell tab, or cleared the way Auctionator's tabs clear it. The cases cover your own `"player"`
+entries and your own spelled-out name, duplicate, empty and hidden owners, rows that name fewer
+sellers than they count, empty listings, `-limit`, `-cd`, the block list, `;` and `/rr` pickup.
+
 Chat colours: the stub colour objects wrap text the way `ColorMixin:WrapTextInColorCode` does (the
 shades are stand-ins, the client builds them from `C_UIColor`), and one check scans every toc file
 for a literal `|c` colour code.

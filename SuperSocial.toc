@@ -14,6 +14,7 @@ Core\Names.lua
 Core\Format.lua
 Core\Lists.lua
 Core\Group.lua
+Core\Auction.lua
 Core\Flags.lua
 Core\Queue.lua
 Commands\Whisper.lua

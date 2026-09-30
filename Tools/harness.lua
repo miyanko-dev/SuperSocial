@@ -147,6 +147,12 @@ YELLOW_FONT_COLOR = colorObject("ffff00")
 GREEN_FONT_COLOR = colorObject("19ff19")
 RED_FONT_COLOR = colorObject("ff2020")
 LIGHTBLUE_FONT_COLOR = colorObject("88aaff")
+ColorManager = {
+    GetColorDataForItemQuality = function(quality)
+        if quality == nil then return nil end
+        return { color = colorObject("ffffff") }
+    end,
+}
 PANEL_INSET_LEFT_OFFSET = 4
 PANEL_INSET_RIGHT_OFFSET = -6
 SCROLL_FRAME_SCROLL_BAR_OFFSET_LEFT = 6
@@ -237,6 +243,40 @@ C_FriendList = {
     SetWhoToUi = function(v) whoToUi = v end,
     SendWho = function()
         schedule(0.5, function() fire("WHO_LIST_UPDATE") end)
+    end,
+}
+
+--=== auction house =========================================================
+-- Search results by item ID. Rows carry owners the way ItemSearchResultInfo and
+-- CommoditySearchResultInfo do: "player" for your own auction, and a totalNumberOfOwners past
+-- #owners for sellers the row leaves unnamed. Every argument is declared Nilable = false.
+local itemResults, commodityResults = {}, {}
+local itemNames = { [2589] = "Linen Cloth", [4306] = "Silk Cloth" }
+C_AuctionHouse = {
+    GetNumItemSearchResults = function(itemKey)
+        assert(type(itemKey) == "table", "bad argument #1: itemKey expected")
+        return #(itemResults[itemKey.itemID] or {})
+    end,
+    GetItemSearchResultInfo = function(itemKey, index)
+        assert(type(itemKey) == "table" and index, "bad argument: itemKey and index expected")
+        return (itemResults[itemKey.itemID] or {})[index]
+    end,
+    GetNumCommoditySearchResults = function(itemID)
+        assert(type(itemID) == "number", "bad argument #1: itemID expected")
+        return #(commodityResults[itemID] or {})
+    end,
+    GetCommoditySearchResultInfo = function(itemID, index)
+        assert(type(itemID) == "number" and index, "bad argument: itemID and index expected")
+        return (commodityResults[itemID] or {})[index]
+    end,
+    MakeItemKey = function(itemID)
+        return { itemID = itemID, itemLevel = 0, itemSuffix = 0, battlePetSpeciesID = 0 }
+    end,
+    -- Nil until the client has cached the item.
+    GetItemKeyInfo = function(itemKey)
+        local name = itemNames[itemKey.itemID]
+        if not name then return nil end
+        return { itemID = itemKey.itemID, itemName = name, quality = 1 }
     end,
 }
 
@@ -610,6 +650,151 @@ expect("-who survived an empty who count", okWait)
 expect("-who timed out instead of whispering", seen("Nobody found") and #whisperLog == 0, "sent " .. #whisperLog)
 friendListReady = true
 
+--=== /ws =====================================================================
+-- A result row as the client hands it over; a row holding your own auction names you "player".
+local function resultRow(owners, total)
+    local mine = false
+    for _, owner in ipairs(owners) do
+        if owner == "player" then mine = true end
+    end
+    return { owners = owners, totalNumberOfOwners = total or #owners, containsOwnerItem = mine, containsAccountItem = false }
+end
+
+local function itemKeyFor(itemID)
+    return { itemID = itemID, itemLevel = 0, itemSuffix = 0, battlePetSpeciesID = 0 }
+end
+
+-- Opening the auction house loads the load-on-demand Blizzard_AuctionHouseUI, whose window starts on its Browse list.
+local function openAuctionHouse()
+    if not AuctionHouseFrame then
+        AuctionHouseFrameDisplayMode = { Buy = {}, ItemBuy = {}, CommoditiesBuy = {}, ItemSell = {} }
+        AuctionHouseFrame = newFrame()
+        function AuctionHouseFrame:GetDisplayMode() return self.displayMode end
+    end
+    AuctionHouseFrame.displayMode = AuctionHouseFrameDisplayMode.Buy
+    AuctionHouseFrame:Show()
+    fire("AUCTION_HOUSE_SHOW")
+end
+
+local function closeAuctionHouse()
+    AuctionHouseFrame:Hide()
+    fire("AUCTION_HOUSE_CLOSED")
+end
+
+local function showItem(itemID)
+    AuctionHouseFrame.displayMode = AuctionHouseFrameDisplayMode.ItemBuy
+    fire("ITEM_SEARCH_RESULTS_UPDATED", itemKeyFor(itemID))
+end
+
+local function whisperSellers(input)
+    resetRun()
+    SlashCmdList["WHISPERSELLERS"](input)
+    runTimers(now + 30)
+end
+
+print("\n-- /ws refuses what it can't read --")
+whisperSellers("hi")
+expect("closed auction house refused", seen("Auction house closed"))
+whisperSellers("")
+expect("usage shown", seen("Usage: /ws MESSAGE"))
+whisperSellers("-skip (mage) hi")
+expect("term filters refused", seen("%-skip and %-only don't apply to /ws"))
+whisperSellers("-who (mage) hi")
+expect("-who refused", seen("%-who doesn't apply to /ws"))
+openAuctionHouse()
+whisperSellers("hi")
+expect("Browse list without a listing refused", seen("No item listings open") and #whisperLog == 0, "sent " .. #whisperLog)
+
+print("\n-- /ws whispers an item's sellers once each, never you --")
+local hiddenOwner = setmetatable({}, { __tostring = function() return "hidden owner" end })
+secretValues[hiddenOwner] = true
+itemResults[2589] = {
+    resultRow({ "player" }),
+    resultRow({ "Sella Vend", "Other Farrealm" }),
+    resultRow({ "Sella Vend" }),
+    resultRow({ "Selfy Mcself" }),
+    resultRow({ "", hiddenOwner }),
+}
+showItem(2589)
+whisperSellers("still selling?")
+expect("two unique sellers whispered", #whisperLog == 2, "got " .. #whisperLog)
+expect("listing order kept", targetOf(1) == "Sella Vend" and targetOf(2) == "Other Farrealm", targetOf(1) .. ", " .. targetOf(2))
+expect("run names the item", seen("Whispering all 2 sellers of Linen Cloth%."))
+expect("echoes confirmed every whisper", seen("Sent all 2 whispers"))
+expect("no unnamed note for fully named rows", not seen("unnamed by the auction house"))
+
+print("\n-- the Browse list hides a cached listing --")
+AuctionHouseFrame.displayMode = AuctionHouseFrameDisplayMode.Buy
+whisperSellers("hi")
+expect("back on Browse refused", seen("No item listings open") and #whisperLog == 0, "sent " .. #whisperLog)
+
+print("\n-- commodity results replace the item listing --")
+commodityResults[4306] = {
+    resultRow({ "Comm One", "player", "Comm Two" }, 6),
+    resultRow({ "Comm One" }),
+}
+AuctionHouseFrame.displayMode = AuctionHouseFrameDisplayMode.CommoditiesBuy
+fire("COMMODITY_SEARCH_RESULTS_UPDATED", 4306)
+whisperSellers("-limit 1 bulk price?")
+expect("limit honoured", #whisperLog == 1 and targetOf(1) == "Comm One", "got " .. #whisperLog .. " to " .. targetOf(1))
+expect("commodity run names its item", seen("Whispering 1 of 2 sellers of Silk Cloth"))
+expect("limit skip reported", seen("1 over the limit"))
+expect("unnamed sellers counted", seen("Up to 3 sellers unnamed by the auction house"))
+
+print("\n-- Auctionator's tabs clear the display mode and still read the listing --")
+AuctionHouseFrame.displayMode = nil
+whisperSellers("hi ; still there?")
+expect("both parts to both sellers", #whisperLog == 4, "got " .. #whisperLog)
+
+print("\n-- the Sell tab's listing counts too --")
+itemResults[5555] = { resultRow({ "Rival Seller" }) }
+AuctionHouseFrame.displayMode = AuctionHouseFrameDisplayMode.ItemSell
+fire("ITEM_SEARCH_RESULTS_UPDATED", itemKeyFor(5555))
+whisperSellers("undercut me?")
+expect("sell listing seller whispered", #whisperLog == 1 and targetOf(1) == "Rival Seller", "got " .. targetOf(1))
+expect("uncached item left unnamed", seen("Whispering all 1 seller%."))
+
+print("\n-- your own auctions or an empty listing leave nobody --")
+itemResults[6666] = { resultRow({ "player" }), resultRow({ "Selfy-Mcself" }) }
+showItem(6666)
+whisperSellers("hi")
+expect("own auctions only", seen("No other sellers") and #whisperLog == 0, "sent " .. #whisperLog)
+itemResults[7777] = {}
+showItem(7777)
+whisperSellers("hi")
+expect("no results", seen("No other sellers") and #whisperLog == 0, "sent " .. #whisperLog)
+
+print("\n-- /ws honours cooldowns and the block list --")
+showItem(2589)
+whisperSellers("-cd 30d hi")
+expect("cooldown run sent", #whisperLog == 2, "got " .. #whisperLog)
+whisperSellers("-cd hi")
+expect("sellers on cooldown skipped", seen("2 on cooldown") and #whisperLog == 0, "sent " .. #whisperLog)
+SlashCmdList["SUPERSOCIAL"]("-cd clear")
+SlashCmdList["SUPERSOCIAL"]("-block Sella-Vend")
+whisperSellers("hi")
+expect("blocked seller skipped", seen("1 blocked") and #whisperLog == 1 and targetOf(1) == "Other Farrealm", "got " .. targetOf(1))
+SlashCmdList["SUPERSOCIAL"]("-unblock Sella-Vend")
+
+print("\n-- a seller answering /ws is waiting for /rr --")
+SlashCmdList["REPLYRECENT"]("reset")
+whisperSellers("still selling?")
+resetRun()
+fire("CHAT_MSG_WHISPER", "yes", "Other Farrealm")
+SlashCmdList["REPLYRECENT"]("")
+expect("seller reply tracked", seen("1 unanswered"))
+SlashCmdList["REPLYRECENT"]("reset")
+
+print("\n-- closing the auction house forgets the listing --")
+closeAuctionHouse()
+whisperSellers("hi")
+expect("closed after a visit refused", seen("Auction house closed") and #whisperLog == 0, "sent " .. #whisperLog)
+openAuctionHouse()
+AuctionHouseFrame.displayMode = AuctionHouseFrameDisplayMode.ItemBuy
+whisperSellers("hi")
+expect("new visit starts without a listing", seen("No item listings open") and #whisperLog == 0, "sent " .. #whisperLog)
+closeAuctionHouse()
+
 print("\n-- the /ss panel builds on ButtonFrameTemplate --")
 resetRun()
 SlashCmdList["SUPERSOCIAL"]("")
@@ -624,6 +809,11 @@ expect("button bar hidden", panel and panel._buttonBarHidden == true)
 local scrollRight = scrollFrames[1] and scrollFrames[1]._points.BOTTOMRIGHT
 expect("scroll gutter fits the 8 px bar at +6 plus the inset pad", scrollRight and scrollRight[1] == -22,
     "got " .. tostring(scrollRight and scrollRight[1]))
+local panelMentionsWs = false
+for _, f in ipairs(frames) do
+    if type(f._text) == "string" and f._text:find("/ws", 1, true) then panelMentionsWs = true end
+end
+expect("panel lists /ws", panelMentionsWs)
 SlashCmdList["SUPERSOCIAL"]("")
 expect("second /ss closes it", panel and not panel:IsShown())
 
@@ -668,6 +858,9 @@ expect("/ww refused", seen("Chat restricted here"))
 resetRun()
 SlashCmdList["WHISPERTARGET"]("hi")
 expect("/wt refused", seen("Chat restricted here"))
+resetRun()
+SlashCmdList["WHISPERSELLERS"]("hi")
+expect("/ws refused", seen("Chat restricted here"))
 restrictionActive = false
 
 print("\n-- a run walking into a lockdown stops at once --")

@@ -1,6 +1,6 @@
 local _, ns = ...
 
--- The outgoing commands: /ww blasts the current or a fresh /who list, /wt whispers the selected player. Both hand every whisper to the queue.
+-- The outgoing commands: /ww blasts the current or a fresh /who list, /wt whispers the selected player, and /ws whispers the sellers of the auction house listing on screen. All hand every whisper to the queue.
 
 local ok = ns.Ok
 local fail = ns.Fail
@@ -76,10 +76,10 @@ local function loadLists(opts)
 end
 
 -- Cap to -limit, report one status line, queue the sends, stamp the persistent lists and hand the names to /rr.
-local function sendBlast(opts, lists, eligible, counts, total)
+local function sendBlast(opts, lists, eligible, counts, total, singular, multiple)
     local sendCount = opts.limit and math.min(opts.limit, #eligible) or #eligible
     counts.limit = #eligible - sendCount
-    local pool = total .. " " .. plural(total, "/who result", "/who results")
+    local pool = total .. " " .. plural(total, singular, multiple)
 
     if sendCount == 0 then
         fail("Nobody to whisper.", "None of " .. pool .. " qualify.")
@@ -143,7 +143,7 @@ local function dispatchWho(opts)
         end
     end
 
-    sendBlast(opts, lists, eligible, counts, count)
+    sendBlast(opts, lists, eligible, counts, count, "/who result", "/who results")
 end
 
 local WHO_TIMEOUT = 6      -- Seconds to wait for the server's answer before aborting, since the who list still holds the previous search.
@@ -227,8 +227,82 @@ local function whisperWho(input)
     end
 end
 
+-- Every seller of the listing once, in listing order, minus yourself. The results already name you "player"; the name check also catches a listing that spells you out.
+local function uniqueSellers(sellers)
+    local me = ns.UnitFullName("player")
+    local seen, names = {}, {}
+    for _, name in ipairs(sellers) do
+        local key = ns.NameKey(name)
+        if key and not seen[key] and not ns.SameName(name, me) then
+            seen[key] = true
+            names[#names + 1] = name
+        end
+    end
+    return names
+end
+
+-- One hint per reason no listing can be read, naming the one step that is missing.
+local LISTING_HINTS = {
+    closed = { "Auction house closed.", "Open it, then open an item's listings." },
+    browse = { "No item listings open.", "Browse rows name no sellers. Open an item's listings first." },
+}
+
+local function whisperSellers(input)
+    local opts = ns.ParseFlags(trim(input))
+    if ns.FlagMistake(opts, true) then return end
+    if ns.UsedWho(opts) then
+        fail("-who doesn't apply to /ws.", "It reads the auction house listings.")
+        return
+    end
+
+    -- Sellers carry no class or zone, so the term filters can't apply here.
+    if #opts.terms > 0 or #opts.includeTerms > 0 then
+        fail("-skip and -only don't apply to /ws.", "Sellers carry no class or zone.")
+        return
+    end
+    if not opts.text or opts.text == "" then
+        note("Usage: /ws MESSAGE whispers every seller in the item listings open in the auction house, e.g. /ws still selling your Black Lotus?")
+        return
+    end
+    if refuseRestricted() then return end
+    local problem = ns.ListingProblem()
+    if problem then
+        fail(LISTING_HINTS[problem][1], LISTING_HINTS[problem][2])
+        return
+    end
+    local sellers, unnamed = ns.ListingSellers()
+    if unnamed > 0 then
+        note("Up to " .. unnamed .. " " .. plural(unnamed, "seller", "sellers") .. " unnamed by the auction house, not whispered.")
+    end
+    local names = uniqueSellers(sellers)
+    if #names == 0 then
+        fail("No other sellers", "in the open listings.")
+        return
+    end
+
+    local lists = loadLists(opts)
+    local counts = { blocked = 0, cooldown = 0 }
+    local eligible = {}
+    for _, sellerName in ipairs(names) do
+        if ns.IsBlocked(lists.blocked, sellerName) then
+            counts.blocked = counts.blocked + 1
+        elseif lists.cooldown and ns.OnCooldown(lists.cooldown, sellerName) then
+            counts.cooldown = counts.cooldown + 1
+        else
+            eligible[#eligible + 1] = sellerName
+        end
+    end
+
+    local item = ns.ListingItem()
+    local of = item and (" of " .. item) or ""
+    sendBlast(opts, lists, eligible, counts, #names, "seller" .. of, "sellers" .. of)
+end
+
 SLASH_WHISPERTARGET1 = "/wt"
 SlashCmdList["WHISPERTARGET"] = whisperTarget
 
 SLASH_WHISPERWHO1 = "/ww"
 SlashCmdList["WHISPERWHO"] = whisperWho
+
+SLASH_WHISPERSELLERS1 = "/ws"
+SlashCmdList["WHISPERSELLERS"] = whisperSellers
