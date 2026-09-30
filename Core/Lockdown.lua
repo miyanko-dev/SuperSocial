@@ -2,11 +2,9 @@ local _, ns = ...
 
 -- Chat restrictions: the secret-value guard every payload reader asks first, the lockdown check every command asks before it starts, and the warning a running queue gets when a lockdown is coming.
 
--- Chat payloads and unit names turn secret inside restricted content. issecretvalue declares SecretArguments "AllowedWhenUntainted" and Nilable = false; whether that makes it raise for tainted addon code is unsettled, so pcall reads a raise as secret, and nil never reaches it because nil is never secret.
+-- Chat payloads and unit names turn secret inside restricted content. canaccessvalue asks whether the calling code may use a value, and Blizzard's own chat filter wrapper calls it under an addon's captured taint and reads the answer (ChatFrameFilters.lua), so it answers where issecretvalue might raise. Its argument is not nilable, and nil is never secret, so nil never reaches it.
 local function canAccess(value)
-    if value == nil then return true end
-    local ok, secret = pcall(issecretvalue, value)
-    return ok and not secret
+    return value == nil or canaccessvalue(value)
 end
 
 -- The client's own answer to "are chat payloads secret right now" ("Returns true if API security restrictions regarding chat messaging are in effect"), which is exactly the condition that makes a whisper echo unreadable. Asking it beats deriving the answer from AddOnRestrictionType, where which values imply chat secrecy is only inferable from prose.
@@ -21,7 +19,7 @@ local function refuseRestricted()
     return true
 end
 
--- ADDON_RESTRICTION_STATE_CHANGED is the only warning a run gets that the rules are about to change. It fires before a restriction is enforced and after one is lifted, so the check is deferred a frame and then simply asks whether a chat lockdown is now in effect; a deactivation answers no and nothing happens. Polling instead would notice a full echo timeout later, long enough to have recycled every whisper the lockdown swallowed.
+-- ADDON_RESTRICTION_STATE_CHANGED is the only warning a run gets that the rules are about to change. It fires before a restriction is enforced and after one is lifted, and an activating restriction is enforced once the event's dispatch completes, so the check is deferred a frame and then simply asks whether a chat lockdown is now in effect; a deactivation answers no and nothing happens. The payload names the restriction type, but which types hide chat is undocumented, so the payload is not read. Polling instead would notice a full echo timeout later, long enough to have recycled every whisper the lockdown swallowed.
 local lockdownListeners = {}
 
 function ns.OnChatLockdown(callback)

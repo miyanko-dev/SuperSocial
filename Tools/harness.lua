@@ -62,7 +62,7 @@ local function newFrame()
     function f:Show() self._shown = true end
     function f:Hide() self._shown = false end
     function f:IsShown() return self._shown end
-    function f:IsVisible() return self._shown end
+    function f:IsVisible() return self._shown and (not self._parent or self._parent:IsVisible()) end
     function f:SetPoint() end
     function f:SetSize() end
     function f:SetWidth() end
@@ -201,8 +201,13 @@ ERR_CHAT_RESTRICTED_TRIAL = ERR_CHAT_RESTRICTED
 --=== who list ===============================================================
 local whoResults = {}
 local whoToUi = false
+-- RequiresFriendList: the who calls return nothing while the friend list is unavailable.
+local friendListReady = true
 C_FriendList = {
-    GetNumWhoResults = function() return #whoResults, #whoResults end,
+    GetNumWhoResults = function()
+        if not friendListReady then return end
+        return #whoResults, #whoResults
+    end,
     GetWhoInfo = function(i) return whoResults[i] end,
     SetWhoToUi = function(v) whoToUi = v end,
     SendWho = function()
@@ -214,30 +219,34 @@ C_FriendList = {
 SlashCmdList = {}
 
 --=== client surface =======================================================
--- The Who tab is the load-on-demand LFGWhoListFrame, ChatFrameUtil is the filter API, and chat
--- payloads go secret under a lockdown.
+-- The Who tab is the load-on-demand LFGWhoListFrame inside LFGParentFrame, ChatFrameUtil is the
+-- filter API, and chat payloads go secret under a lockdown.
 local restrictionActive = false
 local secretValues = {}
 
+LFGParentFrame = newFrame()
 LFGWhoListFrame = newFrame()
+LFGWhoListFrame._parent = LFGParentFrame
 LFGWhoListFrame:RegisterEvent("WHO_LIST_UPDATE")
 ChatFrameUtil = {
     AddMessageEventFilter = function(event, fn) chatFilters[event] = fn end,
 }
 
--- The argument is declared Nilable = false, so nil raises. Strict mode never answers for a secret.
-local function secretPredicate(answerSecret)
+-- The argument is declared Nilable = false, so nil raises. Strict issecretvalue never answers for a
+-- secret. canaccessvalue always answers, because Blizzard's chat filter wrapper calls it under addon
+-- taint and reads the result (ChatFrameFilters.lua).
+local function secretPredicate(answerSecret, mayRaise)
     return function(value)
         assert(value ~= nil, "bad argument #1: value expected")
         if secretValues[value] then
-            if SECRETS == "strict" then error("Secret values are only allowed during untainted execution for this argument.") end
+            if mayRaise and SECRETS == "strict" then error("Secret values are only allowed during untainted execution for this argument.") end
             return answerSecret
         end
         return not answerSecret
     end
 end
-issecretvalue = secretPredicate(true)
-canaccessvalue = secretPredicate(false)
+issecretvalue = secretPredicate(true, true)
+canaccessvalue = secretPredicate(false, false)
 
 Enum = {
     AddOnRestrictionType = { Combat = 0, Encounter = 1, ChallengeMode = 2, PvPMatch = 3, Map = 4, Chat = 5 },
@@ -519,6 +528,42 @@ expect("who search dispatched", #whisperLog == 1, "got " .. #whisperLog)
 runTimers(now + 20)
 expect("who frame listening again", LFGWhoListFrame:IsEventRegistered("WHO_LIST_UPDATE"))
 expect("who routing restored", whoToUi == false)
+
+print("\n-- a closed Group Finder leaves who results in chat --")
+-- The Who tab keeps its shown flag when its parent closes, and its OnHide has sent results to chat.
+LFGParentFrame:Show()
+LFGWhoListFrame:Show()
+LFGParentFrame:Hide()
+whoToUi = false
+resetRun()
+setWho({ "Eee" })
+SlashCmdList["WHISPERWHO"]("-who (mage 60) hi")
+runTimers(now + 20)
+expect("results still go to chat", whoToUi == false)
+LFGParentFrame:Show()
+whoToUi = true
+resetRun()
+SlashCmdList["WHISPERWHO"]("-who (mage 60) hi")
+runTimers(now + 20)
+expect("an open Who tab gets its results back", whoToUi == true)
+LFGWhoListFrame:Hide()
+LFGParentFrame:Hide()
+whoToUi = false
+
+print("\n-- an unavailable friend list reads as no results --")
+friendListReady = false
+resetRun()
+local okEmpty = pcall(SlashCmdList["WHISPERWHO"], "hi")
+expect("/ww survived an empty who count", okEmpty)
+expect("/ww reported no results", seen("No /who results"))
+resetRun()
+local okWait = pcall(function()
+    SlashCmdList["WHISPERWHO"]("-who (mage 60) hi")
+    runTimers(now + 20)
+end)
+expect("-who survived an empty who count", okWait)
+expect("-who timed out instead of whispering", seen("Nobody found") and #whisperLog == 0, "sent " .. #whisperLog)
+friendListReady = true
 
 print("\n-- help panel builds --")
 resetRun()

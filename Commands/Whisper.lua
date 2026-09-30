@@ -110,7 +110,8 @@ local function sendBlast(opts, lists, eligible, counts, total)
 end
 
 local function dispatchWho(opts)
-    local count = C_FriendList.GetNumWhoResults()
+    -- The who list is RequiresFriendList, which returns nothing while the friend list is unavailable.
+    local count = C_FriendList.GetNumWhoResults() or 0
     if count == 0 then
         fail("No /who results.", "Run /who first, or use -who (…).")
         return
@@ -160,9 +161,9 @@ local function deafenWhoUi()
     C_FriendList.SetWhoToUi(true)
 end
 
--- Put the who plumbing back where the panel expects it: results to chat unless the panel is open, and the panel listening again.
+-- Put the who plumbing back where the panel expects it: results to chat unless the panel is open, and the panel listening again. IsVisible, because the tab keeps its own shown flag when the Group Finder closes around it, and its OnHide has already sent results back to chat.
 local function restoreWhoUi()
-    C_FriendList.SetWhoToUi(LFGWhoListFrame ~= nil and LFGWhoListFrame:IsShown())
+    C_FriendList.SetWhoToUi(LFGWhoListFrame ~= nil and LFGWhoListFrame:IsVisible())
     if deafened then deafened:RegisterEvent("WHO_LIST_UPDATE") end
     deafened = nil
 end
@@ -189,7 +190,7 @@ local function runWho(opts)
     -- A /who fires WHO_LIST_UPDATE twice: once to clear the old rows, then again when the server's answer lands. Only the second one carries results.
     whoWaiter:SetScript("OnEvent", function()
         local count, total = C_FriendList.GetNumWhoResults()
-        if count == 0 then return end
+        if not count or count == 0 then return end
         stop()
         if total and total > count then
             note(count .. " of " .. total .. " matches shown. Narrow the filter for the rest.")

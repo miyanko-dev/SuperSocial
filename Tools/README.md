@@ -20,12 +20,19 @@ for secrets in strict lenient; do
 done
 ```
 
-The second argument decides what `issecretvalue` and `canaccessvalue` do when handed a secret: `strict`
-(the default) raises, as their `SecretArguments = "AllowedWhenUntainted"` annotation can be read,
-`lenient` answers, as Blizzard's chat filters rely on. No source settles which one the client does, so
-the addon must pass both. Both modes also raise on `nil`, because the argument is declared
-`Nilable = false`, and the stub defines no bare `SendChatMessage` global, because it only exists while
-the `loadDeprecationFallbacks` CVar is on.
+The second argument decides what `issecretvalue` does when tainted code hands it a secret: `strict`
+(the default) raises, as its `SecretArguments = "AllowedWhenUntainted"` annotation can be read,
+`lenient` answers. No source settles which one the client does. `canaccessvalue` answers in both
+modes, because Blizzard's own chat filter wrapper calls it under addon taint and reads the result
+(`ChatFrameFilters.lua`); the addon guards secrets with it, and `strict` proves nothing slips back to
+`issecretvalue`. Both predicates raise on `nil`, because the argument is declared `Nilable = false`,
+and the stub defines no bare `SendChatMessage` global, because it only exists while the
+`loadDeprecationFallbacks` CVar is on.
+
+Two cases pin client details the stub models: the Who tab inside a closed Group Finder still reports
+`IsShown()` but not `IsVisible()`, so a `-who` run must leave results in chat; and
+`C_FriendList.GetNumWhoResults()` returns nothing while the friend list is unavailable
+(`RequiresFriendList`, `FailureMode = "ReturnNothing"`).
 
 Exits non-zero when any expectation fails. Lua 5.2 or newer.
 
