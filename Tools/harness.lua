@@ -61,15 +61,16 @@ local function newFrame()
     end
     function f:Show() self._shown = true end
     function f:Hide() self._shown = false end
+    function f:SetShown(shown) self._shown = shown and true or false end
     function f:IsShown() return self._shown end
     function f:IsVisible() return self._shown and (not self._parent or self._parent:IsVisible()) end
-    function f:SetPoint() end
+    function f:SetPoint(point, ...) self._points[point] = { ... } end
     function f:SetSize() end
     function f:SetWidth() end
     function f:SetHeight() end
     function f:GetWidth() return 420 end
     function f:GetHeight() return 100 end
-    function f:SetFrameStrata() end
+    function f:SetFrameStrata(strata) self._strata = strata end
     function f:SetToplevel() end
     function f:SetClampedToScreen() end
     function f:SetMovable() end
@@ -79,6 +80,7 @@ local function newFrame()
     function f:StopMovingOrSizing() end
     function f:SetScrollChild() end
     function f:SetJustifyH() end
+    function f:SetWordWrap() end
     function f:SetText(text) self._text = text end
     function f:GetStringHeight() return 12 end
     function f:CreateFontString() return newFrame() end
@@ -87,12 +89,22 @@ local function newFrame()
 end
 
 --=== template-provided children ============================================
--- BasicFrameTemplateWithInset hands the frame a TitleText, a CloseButton and its InsetBg well, and
--- ScrollFrameTemplate builds a ScrollBar in its OnLoad; the stub supplies them too.
+-- ButtonFrameTemplate hands the frame a portrait, a TitleContainer, a CloseButton and its Inset
+-- (PortraitFrameMixin, SharedUIPanelTemplates.xml), and ScrollFrameTemplate builds an 8 px wide
+-- MinimalScrollBar in its OnLoad; the stub supplies them too.
+local scrollFrames = {}
 local KNOWN_TEMPLATES = {
-    BasicFrameTemplateWithInset = function(f) f.TitleText = newFrame(); f.CloseButton = newFrame(); f.InsetBg = newFrame() end,
+    ButtonFrameTemplate = function(f)
+        f.TitleContainer = newFrame(); f.CloseButton = newFrame(); f.Inset = newFrame()
+        function f:SetPortraitToAsset(texture) self._portrait = texture end
+        function f:SetTitle(title) self._title = title end
+    end,
     InsetFrameTemplate = function(f) f.NineSlice = newFrame() end,
-    ScrollFrameTemplate = function(f) f.ScrollBar = newFrame() end,
+    ScrollFrameTemplate = function(f)
+        f.ScrollBar = newFrame()
+        function f.ScrollBar:GetWidth() return 8 end
+        scrollFrames[#scrollFrames + 1] = f
+    end,
 }
 
 _G = _ENV or _G
@@ -126,6 +138,10 @@ DEFAULT_CHAT_FRAME = {
     end,
 }
 NORMAL_FONT_COLOR = { WrapTextInColorCode = function(_, text) return "|cffffd100" .. text .. "|r" end }
+PANEL_INSET_LEFT_OFFSET = 4
+PANEL_INSET_RIGHT_OFFSET = -6
+SCROLL_FRAME_SCROLL_BAR_OFFSET_LEFT = 6
+function ButtonFrameTemplate_HideButtonBar(frame) frame._buttonBarHidden = true end
 
 function GetTime() return now end
 function time() return wallclock end
@@ -565,13 +581,22 @@ expect("-who survived an empty who count", okWait)
 expect("-who timed out instead of whispering", seen("Nobody found") and #whisperLog == 0, "sent " .. #whisperLog)
 friendListReady = true
 
-print("\n-- help panel builds --")
+print("\n-- the /ss panel builds on ButtonFrameTemplate --")
 resetRun()
 SlashCmdList["SUPERSOCIAL"]("")
-expect("panel created", _G.SuperSocialHelpFrame ~= nil)
-expect("panel shown", _G.SuperSocialHelpFrame and _G.SuperSocialHelpFrame:IsShown())
-expect("registered for escape", UISpecialFrames[1] == "SuperSocialHelpFrame")
+local panel = _G.SuperSocialFrame
+expect("panel created", panel ~= nil)
+expect("panel shown", panel and panel:IsShown())
+expect("registered for escape", UISpecialFrames[1] == "SuperSocialFrame")
+expect("title without version", panel and panel._title == "Super Social", "got " .. tostring(panel and panel._title))
+expect("portrait is the toc icon", panel and panel._portrait == 134149)
+expect("strata HIGH", panel and panel._strata == "HIGH")
+expect("button bar hidden", panel and panel._buttonBarHidden == true)
+local scrollRight = scrollFrames[1] and scrollFrames[1]._points.BOTTOMRIGHT
+expect("scroll gutter fits the 8 px bar at +6 plus the inset pad", scrollRight and scrollRight[1] == -22,
+    "got " .. tostring(scrollRight and scrollRight[1]))
 SlashCmdList["SUPERSOCIAL"]("")
+expect("second /ss closes it", panel and not panel:IsShown())
 
 print("\n-- rate and quiet subcommands --")
 resetRun()

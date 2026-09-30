@@ -129,7 +129,7 @@ local function adminCommand(input)
     local raw = trim(input)
     input = raw:lower()
     if input == "" or input == "help" then
-        ns.ToggleHelp()
+        ns.TogglePanel()
     elseif input == "-block" or input == "-block list" then
         listBlocked()
     elseif input:match("^%-block%s") then

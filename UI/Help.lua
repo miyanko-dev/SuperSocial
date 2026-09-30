@@ -1,12 +1,13 @@
 local _, ns = ...
 
--- A scrollable reference panel for every command and option, opened with "/ss". Built entirely from the game's own templates and font objects, each defined per client, so it wears Era's or Forever's own chrome, scroll bar and type instead of assuming a texture path exists on both.
+-- A scrollable reference panel for every command and option, opened with "/ss". Built from Blizzard's own ButtonFrameTemplate window, inset boxes, scroll frame and font objects, so it wears the client's own chrome.
 
+local PANEL_NAME = "SuperSocialFrame"
+local PANEL_ICON = 134149      -- the toc IconTexture
 local PANEL_WIDTH = 480
 local PANEL_HEIGHT = 580
-local INSET_MARGINS = 4 + 6    -- BasicFrameTemplateWithInset's InsetBg sits 4px in on the left and 6px on the right, on both clients
-local INSET_PAD = 8            -- content sits this far inside that well, which also keeps Era's scroll bar (drawn 7px above the frame, Classic/ScrollDefine.lua) inside it
-local SCROLLBAR_GUTTER = 28    -- ScrollFrameTemplate hangs its bar off the frame's right edge: 8px wide at +6 on Forever (MinimalScrollBar), 25px at -2 on Era (WowClassicScrollBar)
+local ATTIC_PAD = 6            -- the intro's gap below the title bar
+local INSET_PAD = 8            -- content sits this far inside the inset
 local SECTION_GAP = 26         -- also clears the section label riding above each box
 local SECTION_INNER_PAD = 12
 local SECTION_LABEL_LIFT = 7
@@ -14,10 +15,9 @@ local LABEL_WIDTH = 116
 local COLUMN_GAP = 12
 local ROW_GAP = 10
 
--- The panel is three sections: the slash commands, the /ss management subcommands, then the flags that refine /ww. "cmd" is the yellow left-column label; "eg" carries the full worked example so the column stays scannable.
-local INTRO =
-    "Run /who, then /ww whispers everyone in the results — that's the core idea. "
-    .. "The flags below refine who hears it, and they stack in any order before the message. "
+-- The attic holds the one-line idea and a hint; the inset below holds three sections: the slash commands, the /ss management subcommands, then the flags that refine /ww. "cmd" is the gold left-column label; "eg" carries the full worked example so the column stays scannable.
+local INTRO = "Run /who, then /ww MESSAGE whispers every result."
+local INTRO_HINT = "Flags refine who hears it and stack in any order before the message."
 
 local COMMANDS = {
     {
@@ -145,7 +145,7 @@ local FOOTER =
     .. "searches levels 55 to 60, whispers up to 20 of them, skips anyone in Maraudon, and won't repeat within 30 minutes. "
     .. "Flags go before the message; anything with more than one word goes in brackets."
 
--- Bordered section container, the game's own inset box, with its yellow label riding on the top edge.
+-- Bordered section container, the game's own inset box, with its gold label riding on the top edge.
 local function buildSection(parent, labelText)
     local section = CreateFrame("Frame", nil, parent, "InsetFrameTemplate")
 
@@ -156,7 +156,7 @@ local function buildSection(parent, labelText)
     return section
 end
 
--- One two-column row: yellow command label left, white description with a yellow example beneath on the right. Returns the row height.
+-- One two-column row: gold command label left, white description with a gold example beneath on the right. Returns the row height.
 local function buildRow(section, y, width, label, body)
     local bodyLeft = SECTION_INNER_PAD + LABEL_WIDTH + COLUMN_GAP
 
@@ -166,8 +166,8 @@ local function buildRow(section, y, width, label, body)
     left:SetJustifyH("LEFT")
     left:SetText(label)
 
-    local right = section:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    right:SetPoint("TOPLEFT", bodyLeft, -y - 1)
+    local right = section:CreateFontString(nil, "ARTWORK", "GameFontHighlight")
+    right:SetPoint("TOPLEFT", bodyLeft, -y)
     right:SetWidth(width - bodyLeft - SECTION_INNER_PAD)
     right:SetJustifyH("LEFT")
     right:SetText(body)
@@ -191,7 +191,7 @@ local function layoutSection(content, width, labelText, entries, describe)
     return section
 end
 
--- Full-width white note, used for the intro and the closing combination example.
+-- Full-width secondary note, used for the closing combination example.
 local function buildNote(content, y, width, text)
     local note = content:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
     note:SetPoint("TOPLEFT", SECTION_INNER_PAD, -y)
@@ -201,45 +201,41 @@ local function buildNote(content, y, width, text)
     return note:GetStringHeight()
 end
 
-local helpFrame
+-- One attic line, spanning the title's width so it clears the portrait on the left and ends where the title does. Word wrap is off, so the line can never grow past the attic into the inset.
+local function buildAtticLine(panel, anchor, fontObject, text)
+    local line = panel:CreateFontString(nil, "ARTWORK", fontObject)
+    line:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -ATTIC_PAD)
+    line:SetPoint("TOPRIGHT", anchor, "BOTTOMRIGHT", 0, -ATTIC_PAD)
+    line:SetJustifyH("LEFT")
+    line:SetWordWrap(false)
+    line:SetText(text)
+    return line
+end
 
-local function buildFrame()
-    -- The game's own titled window: title bar, borders, close button and content inset come with the template, which each client defines in its own UIPanelTemplates.xml.
-    local panel = CreateFrame("Frame", "SuperSocialHelpFrame", UIParent, "BasicFrameTemplateWithInset")
-    panel:SetSize(PANEL_WIDTH, PANEL_HEIGHT)
-    panel:SetPoint("CENTER")
-    panel:SetFrameStrata("DIALOG")
-    panel:SetToplevel(true)
-    panel:SetClampedToScreen(true)
-    panel:SetMovable(true)
-    panel:EnableMouse(true)
-    panel:RegisterForDrag("LeftButton")
-    panel:SetScript("OnDragStart", panel.StartMoving)
-    panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
-    panel.TitleText:SetText("Super Social")
-    tinsert(UISpecialFrames, "SuperSocialHelpFrame")
+-- ScrollFrameTemplate hangs its MinimalScrollBar off the scroll frame's right edge at SCROLL_FRAME_SCROLL_BAR_OFFSET_LEFT, so the gutter reserves that offset plus the bar's own width and the inset padding, which keeps the bar inside the inset. Returns the scroll child and its width, fixed before any text wraps.
+local function buildScroll(panel)
+    local scroll = CreateFrame("ScrollFrame", nil, panel.Inset, "ScrollFrameTemplate")
+    local gutter = SCROLL_FRAME_SCROLL_BAR_OFFSET_LEFT + scroll.ScrollBar:GetWidth() + INSET_PAD
+    scroll:SetPoint("TOPLEFT", INSET_PAD, -INSET_PAD)
+    scroll:SetPoint("BOTTOMRIGHT", -gutter, INSET_PAD)
 
-    -- ScrollFrameTemplate builds SCROLL_FRAME_SCROLL_BAR_TEMPLATE, which each client's ScrollDefine.lua names, so the bar is Blizzard's current one on both instead of the legacy UIPanelScrollFrame art.
-    local scroll = CreateFrame("ScrollFrame", "SuperSocialHelpScroll", panel, "ScrollFrameTemplate")
-    scroll:SetPoint("TOPLEFT", panel.InsetBg, "TOPLEFT", INSET_PAD, -INSET_PAD)
-    scroll:SetPoint("BOTTOMRIGHT", panel.InsetBg, "BOTTOMRIGHT", -SCROLLBAR_GUTTER, INSET_PAD)
-
-    -- The scroll child needs its width before any text wraps, and the template's fixed inset margins make it computable up front.
     local content = CreateFrame("Frame", nil, scroll)
     scroll:SetScrollChild(content)
-    local width = PANEL_WIDTH - INSET_MARGINS - INSET_PAD - SCROLLBAR_GUTTER
+    local width = PANEL_WIDTH - PANEL_INSET_LEFT_OFFSET + PANEL_INSET_RIGHT_OFFSET - INSET_PAD - gutter
     content:SetWidth(width)
+    return content, width
+end
 
-    local y = 4
-    y = y + buildNote(content, y, width, INTRO) + SECTION_GAP
-
+-- The three sections, then the combination example, stacked down the scroll child.
+local function layoutContent(content, width)
     local function withExample(e) return e.desc .. "\n" .. exampleLine(e.eg) end
-
     local sections = {
         { label = "Commands", entries = COMMANDS, describe = withExample },
         { label = "Manage", entries = MANAGE, describe = withExample },
         { label = "Flags", entries = FLAGS, describe = function(e) return e.desc .. "  (" .. table.concat(e.on, ", ") .. ")\n" .. exampleLine(e.eg) end },
     }
+
+    local y = SECTION_GAP
     for _, spec in ipairs(sections) do
         local section = layoutSection(content, width, spec.label, spec.entries, spec.describe)
         section:SetPoint("TOPLEFT", content, "TOPLEFT", 0, -y)
@@ -249,17 +245,40 @@ local function buildFrame()
 
     y = y + buildNote(content, y, width, FOOTER)
     content:SetHeight(y + SECTION_INNER_PAD)
-
-    panel:Hide()
-    helpFrame = panel
 end
 
--- Built lazily on first open so we never create frames during file load.
-function ns.ToggleHelp()
-    if not helpFrame then buildFrame() end
-    if helpFrame:IsShown() then
-        helpFrame:Hide()
-    else
-        helpFrame:Show()
-    end
+-- Blizzard's tool window: portrait, title bar, close button and inset come with ButtonFrameTemplate. Escape closes it through UISpecialFrames, never UIPanelWindows, so it never pushes other panels around.
+local function buildPanel()
+    local panel = CreateFrame("Frame", PANEL_NAME, UIParent, "ButtonFrameTemplate")
+    panel:SetSize(PANEL_WIDTH, PANEL_HEIGHT)
+    panel:SetPoint("CENTER")
+    panel:SetPortraitToAsset(PANEL_ICON)
+    panel:SetTitle("Super Social")
+    panel:SetFrameStrata("HIGH")
+    panel:SetToplevel(true)
+    panel:SetClampedToScreen(true)
+    panel:SetMovable(true)
+    panel:EnableMouse(true)
+    panel:RegisterForDrag("LeftButton")
+    panel:SetScript("OnDragStart", panel.StartMoving)
+    panel:SetScript("OnDragStop", panel.StopMovingOrSizing)
+    tinsert(UISpecialFrames, PANEL_NAME)
+
+    -- A reference with no actions, so the inset takes the button bar's space.
+    ButtonFrameTemplate_HideButtonBar(panel)
+
+    local intro = buildAtticLine(panel, panel.TitleContainer, "GameFontHighlight", INTRO)
+    buildAtticLine(panel, intro, "GameFontDisableSmall", INTRO_HINT)
+    layoutContent(buildScroll(panel))
+
+    panel:Hide()
+    return panel
+end
+
+local panel
+
+-- Built lazily on first open so no frame exists before the player asks for it.
+function ns.TogglePanel()
+    panel = panel or buildPanel()
+    panel:SetShown(not panel:IsShown())
 end

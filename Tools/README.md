@@ -10,6 +10,10 @@ listener, `ChatFrameUtil` as the filter API, unit names as first name plus surna
 `RegionalUniqueNamesEnabled()` true (and a pass with it false, where a realm rides behind `-` across
 realms), secret chat payloads and an active chat lockdown.
 
+The `/ss` panel is built against stub `ButtonFrameTemplate`, `InsetFrameTemplate` and
+`ScrollFrameTemplate` children, which checks the title, portrait, strata, hidden button bar, Escape
+registration and the scroll gutter, not how the panel looks.
+
 It also checks the name rule: `/wt` builds the name the way Blizzard's own menu does, and a whisper
 echo, a reply or a `/who` row spelled another way (`First Surname`, `First-Surname`, a bare first
 name) still matches, so nothing is resent.
