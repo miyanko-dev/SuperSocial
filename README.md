@@ -62,7 +62,7 @@ Up to 20 non-warlocks between 55 and 60, on a 15-minute cooldown.
 | `/rr MESSAGE` | Reply to everyone whispered via `/ww` who answered and is still waiting |
 | `/rr` | Report how many people are waiting, naming them when there are ten or fewer |
 | `/rr reset` | Forget all tracked recipients and their replies |
-| `/ss` | Open the command reference panel |
+| `/ss` | Open the command reference panel (also from **Super Social** in the addon menu at the minimap) |
 | `/ss stop` | Cancel any whispers still queued |
 | `/ss quiet on\|off` | Toggle the in-place counter (on by default) |
 | `/ss rate` | Show the learned send rate, `/ss rate reset` restores the default |

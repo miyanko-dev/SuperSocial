@@ -6,6 +6,9 @@
 ## Category: Social
 ## IconTexture: 134149
 ## SavedVariables: SuperSocialDB
+## AddonCompartmentFunc: SuperSocial_CompartmentClick
+## AddonCompartmentFuncOnEnter: SuperSocial_CompartmentEnter
+## AddonCompartmentFuncOnLeave: SuperSocial_CompartmentLeave
 
 # Load order is the dependency order: Core exports ns.* before Commands and UI read it.
 

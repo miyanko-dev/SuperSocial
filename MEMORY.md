@@ -66,7 +66,7 @@ Names and client facts:
 | SS-12 | Era wording, Era scroll gutter | Done: comments reworded, gutter 28 → 22 from the real bar |
 | SS-13 | README said `-cd` works on `/rr` | Done. Also fixed: README claimed `g-`/`r-` keys for `-skip`/`-only`, which only take `c- z- n-` |
 | SS-14 | Dead `ns.MigrateCooldowns`, `ns.SkipReasons` | Done (`a6130d6`) |
-| SS-15 | toc metadata | Done: `16001`, Forever notes, `## Category: Social` (the lead's choice over the audit's "Chat"). No compartment entry added. Icon `134149` is UNVERIFIED |
+| SS-15 | toc metadata | Done: `16001`, Forever notes, `## Category: Social` (the lead's choice over the audit's "Chat"). Addon Compartment entry added (owner decision): it toggles the command reference. Icon `134149` is `interface/icons/inv_misc_groupneedmore.blp` (community listfile) |
 
 Nothing to do (still valid): the send API; secret guards on `CHAT_MSG_WHISPER_INFORM`, `CHAT_MSG_SYSTEM` and `CHAT_MSG_WHISPER`; lockdown refusal and the echo sweep; no Blizzard hooks and no `ChatTypeInfo` writes; the who flow; the name rule; no slash collisions; load order and first load; repo hygiene (no libs).
 
@@ -74,7 +74,7 @@ Nothing to do (still valid): the send API; secret guards on `CHAT_MSG_WHISPER_IN
 
 Settled 2026-09-30: `/ws` rebuilt on the Forever AH (`eb6e6f1`). Chat colours use Blizzard colour objects with the shared yellow prefix (`b5b03d6`). `/ws` skips groupmates like `/ww` and `/rr` (owner: yes). All three commands run the one `ns.GroupSkip` in `Core/Group.lua`, which replaced the inline `InGroup`/`WasRecentlyGrouped` pairs in `/ww` and `/rr`.
 
-1. Addon Compartment entry. Today: none. Yes means `## AddonCompartmentFunc` plus a global that calls `ns.TogglePanel`, about 5 lines. No means nothing.
+1. Decided: the Addon Compartment entry is added (`SuperSocial_CompartmentClick`/`Enter`/`Leave` in `UI/Help.lua`, calling `ns.TogglePanel`).
 
 ## Unverified assumptions
 

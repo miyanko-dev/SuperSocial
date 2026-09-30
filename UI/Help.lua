@@ -287,3 +287,19 @@ function ns.TogglePanel()
     panel = panel or buildPanel()
     panel:SetShown(not panel:IsShown())
 end
+
+-- Addon Compartment entry points named in the toc. Blizzard calls them with the addon name first, then the menu row.
+function SuperSocial_CompartmentClick()
+    ns.TogglePanel()
+end
+
+function SuperSocial_CompartmentEnter(_, menuButton)
+    GameTooltip:SetOwner(menuButton, "ANCHOR_LEFT")
+    GameTooltip_SetTitle(GameTooltip, "Super Social")
+    GameTooltip_AddInstructionLine(GameTooltip, "Click to toggle the command reference.")
+    GameTooltip:Show()
+end
+
+function SuperSocial_CompartmentLeave()
+    GameTooltip:Hide()
+end
