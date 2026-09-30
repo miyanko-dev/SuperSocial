@@ -14,6 +14,10 @@ The `/ss` panel is built against stub `ButtonFrameTemplate`, `InsetFrameTemplate
 `ScrollFrameTemplate` children, which checks the title, portrait, strata, hidden button bar, Escape
 registration and the scroll gutter, not how the panel looks.
 
+Chat colours: the stub colour objects wrap text the way `ColorMixin:WrapTextInColorCode` does (the
+shades are stand-ins, the client builds them from `C_UIColor`), and one check scans every toc file
+for a literal `|c` colour code.
+
 It also checks the name rule: `/wt` builds the name the way Blizzard's own menu does, and a whisper
 echo, a reply or a `/who` row spelled another way (`First Surname`, `First-Surname`, a bare first
 name) still matches, so nothing is resent.

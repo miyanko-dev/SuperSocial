@@ -1,25 +1,28 @@
 local _, ns = ...
 
--- One place for every Super Social chat line, and one colour convention for the whole addon:
---   yellow  the [Super Social] tag, nothing else
---   green   what went out, and actions that completed
---   red     what didn't go out, and everyone excluded
---   blue    list bookkeeping: cooldowns, the whisper cap
+-- One place for every Super Social chat line, and one colour convention for the whole addon, drawn from Blizzard's own colour objects so the lines wear the client's shades:
+--   yellow      the [Super Social] tag, nothing else
+--   green       what went out, and actions that completed
+--   red         what didn't go out, and everyone excluded
+--   light blue  list bookkeeping: cooldowns, the whisper cap
 -- A line colours its lead token only and leaves the body white, so the eye lands on the same spot every time. The single exception is a line reporting a mix of outcomes, where each count takes its own colour.
 local COLORS = {
-    sent = "ff40ff40", -- green — positive: whispers sent, actions completed
-    skip = "ffff4040", -- red   — negative: errors, skips, empty results
-    cool = "ff76c8ff", -- blue  — cooldown info
+    sent = GREEN_FONT_COLOR,
+    skip = RED_FONT_COLOR,
+    cool = LIGHTBLUE_FONT_COLOR,
 }
+
+-- Every addon in this folder opens its chat lines with the same yellow tag.
+local PREFIX = YELLOW_FONT_COLOR:WrapTextInColorCode("[Super Social]:") .. " "
 
 -- Wrap text in one of the shared status colours.
 local function tint(key, text)
-    return "|c" .. COLORS[key] .. text .. "|r"
+    return COLORS[key]:WrapTextInColorCode(text)
 end
 
 -- One status line per event: the addon tag, then the whole summary. Inline status colours in `text` carry their own codes and show through.
 local function status(text)
-    DEFAULT_CHAT_FRAME:AddMessage("|cffffff00[Super Social]:|r " .. text)
+    DEFAULT_CHAT_FRAME:AddMessage(PREFIX .. text)
 end
 
 -- Every confirmation line is a colour-tinted lead phrase plus optional plain detail, so the shape and colour-by-meaning stay identical everywhere. Callers pick a builder by intent instead of assembling colours by hand.

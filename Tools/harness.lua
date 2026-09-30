@@ -137,7 +137,16 @@ DEFAULT_CHAT_FRAME = {
         end
     end,
 }
-NORMAL_FONT_COLOR = { WrapTextInColorCode = function(_, text) return "|cffffd100" .. text .. "|r" end }
+-- The client builds its colour objects from C_UIColor.GetColors() at load; the shades here are
+-- stand-ins, only the wrapping is modelled.
+local function colorObject(hex)
+    return { WrapTextInColorCode = function(_, text) return "|cff" .. hex .. text .. "|r" end }
+end
+NORMAL_FONT_COLOR = colorObject("ffd100")
+YELLOW_FONT_COLOR = colorObject("ffff00")
+GREEN_FONT_COLOR = colorObject("19ff19")
+RED_FONT_COLOR = colorObject("ff2020")
+LIGHTBLUE_FONT_COLOR = colorObject("88aaff")
 PANEL_INSET_LEFT_OFFSET = 4
 PANEL_INSET_RIGHT_OFFSET = -6
 SCROLL_FRAME_SCROLL_BAR_OFFSET_LEFT = 6
@@ -338,6 +347,26 @@ end
 
 print("\n-- first load needs no saved variables --")
 expect("loading wrote no saved variables", SuperSocialDB == nil)
+
+print("\n-- chat lines wear Blizzard's colour objects --")
+local literal = {}
+for _, rel in ipairs(order) do
+    local lineNo = 0
+    for text in io.lines(ADDON_DIR .. "/" .. rel) do
+        lineNo = lineNo + 1
+        if text:find("|c%x") or text:find("\"|c\"", 1, true) or text:find("\"%x%x%x%x%x%x%x%x\"") then
+            literal[#literal + 1] = rel .. ":" .. lineNo
+        end
+    end
+end
+expect("no literal colour codes in the addon", #literal == 0, table.concat(literal, ", "))
+resetRun()
+chatHistory = {}
+SlashCmdList["SUPERSOCIAL"]("-cd clear")
+local rawLine = chatHistory[1] or ""
+local SHARED_PREFIX = "|cffffff00[Super Social]:|r "
+expect("shared YELLOW_FONT_COLOR prefix", rawLine:sub(1, #SHARED_PREFIX) == SHARED_PREFIX, rawLine)
+expect("lead tinted by GREEN_FONT_COLOR", rawLine:find("|cff19ff19Cooldown list cleared.|r", 1, true) ~= nil, rawLine)
 
 print("\n-- /ww over a who list --")
 resetRun()
