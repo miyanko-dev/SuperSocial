@@ -54,4 +54,4 @@ Exits non-zero when any expectation fails. Lua 5.2 or newer.
 What it proves: load order, that every `ns.*` capture resolves, and the control flow of each command.
 What it cannot prove: anything about the real client — frame layout, whether the server actually
 fires an event, which spelling each API really returns, or what a genuine secret value does to a
-string operation. Those belong in the in-game checks listed in `../MEMORY.md`.
+string operation. Those belong in in-game checks.
